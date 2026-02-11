@@ -94,6 +94,10 @@ export function stats() {
 // Quota tracking functions
 export function getDailyQuotaStatus() {
   const db = getDb();
+  
+  // Ensure row exists
+  db.prepare(`INSERT OR IGNORE INTO quota_tracking (id) VALUES (1)`).run();
+  
   const row = db.prepare(`
     SELECT upload_count, quota_used, date, updated_at 
     FROM quota_tracking 
@@ -103,7 +107,15 @@ export function getDailyQuotaStatus() {
   // Check if it's a new day, reset if needed
   const today = new Date().toISOString().split('T')[0];
   if (row && row.date !== today) {
-    resetDailyQuota();
+    // Reset for new day
+    db.prepare(`
+      UPDATE quota_tracking 
+      SET upload_count = 0,
+          quota_used = 0,
+          date = date('now'),
+          updated_at = datetime('now')
+      WHERE id = 1
+    `).run();
     return { upload_count: 0, quota_used: 0, date: today };
   }
   
@@ -112,33 +124,46 @@ export function getDailyQuotaStatus() {
 
 export function incrementUploadCount(uploadCost = 1600) {
   const db = getDb();
-  const today = new Date().toISOString().split('T')[0];
+  
+  // Ensure row exists before incrementing
+  db.prepare(`INSERT OR IGNORE INTO quota_tracking (id) VALUES (1)`).run();
   
   db.prepare(`
     UPDATE quota_tracking 
     SET upload_count = upload_count + 1,
         quota_used = quota_used + ?,
-        date = ?,
+        date = date('now'),
         updated_at = datetime('now')
     WHERE id = 1
-  `).run(uploadCost, today);
+  `).run(uploadCost);
 }
 
 export function resetDailyQuota() {
   const db = getDb();
-  const today = new Date().toISOString().split('T')[0];
   
   db.prepare(`
     UPDATE quota_tracking 
     SET upload_count = 0,
         quota_used = 0,
-        date = ?,
+        date = date('now'),
         updated_at = datetime('now')
     WHERE id = 1
-  `).run(today);
+  `).run();
 }
 
 export function canUploadToday(maxUploadsPerDay) {
   const status = getDailyQuotaStatus();
   return status.upload_count < maxUploadsPerDay;
+}
+
+export function getQuotaStats() {
+  const db = getDb();
+  const status = getDailyQuotaStatus();
+  const remaining = Math.max(0, Math.floor((10000 - status.quota_used) / 1600));
+  
+  return {
+    ...status,
+    remaining_uploads: remaining,
+    quota_percentage: Math.round((status.quota_used / 10000) * 100)
+  };
 }
