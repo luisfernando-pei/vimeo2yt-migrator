@@ -48,6 +48,17 @@ export const config = {
     cleanupOk: process.env.CLEANUP_OK === "1",
     maxAttempts: Number(process.env.MAX_ATTEMPTS || 5),
   },
+
+  quota: {
+    // YouTube API v3 daily quota limit (default: 10,000 units)
+    dailyLimit: Number(process.env.YT_DAILY_QUOTA_LIMIT || 10000),
+    // Each video.insert costs approximately 1600 units
+    uploadCost: 1600,
+    // Calculate max uploads per day (conservative: 6 uploads with 10k quota)
+    get maxUploadsPerDay() {
+      return Math.floor(this.dailyLimit / this.uploadCost);
+    },
+  },
 };
 
 export function ensureDirs() {

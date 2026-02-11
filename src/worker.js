@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { config } from "./config.js";
-import { nextJob, setStatus, incAttempts } from "./db.js";
+import { nextJob, setStatus, incAttempts, getDailyQuotaStatus, canUploadToday, incrementUploadCount } from "./db.js";
 import { downloadVimeoToFile } from "./vimeo.js";
 import { uploadToYouTube } from "./youtube.js";
 import { updateWpYouTubeUrl } from "./wordpress.js";
@@ -18,11 +18,23 @@ function envName() {
 }
 
 export async function runWorkerOnce() {
+  // Check quota before processing
+  if (!canUploadToday(config.quota.maxUploadsPerDay)) {
+    const quotaStatus = getDailyQuotaStatus();
+    log(`QUOTA EXHAUSTED: ${quotaStatus.upload_count}/${config.quota.maxUploadsPerDay} uploads today (${quotaStatus.quota_used}/${config.quota.dailyLimit} units)`);
+    log("Stopping worker to preserve YouTube API quota. Resume tomorrow.");
+    return false; // Stop the loop
+  }
+
   const job = nextJob();
   if (!job) {
     log("No jobs queued/failed.");
     return false;
   }
+
+  // Show quota status at start of each job
+  const quotaStatus = getDailyQuotaStatus();
+  log(`QUOTA STATUS: ${quotaStatus.upload_count}/${config.quota.maxUploadsPerDay} uploads today (${quotaStatus.quota_used}/${config.quota.dailyLimit} units)`);
 
   incAttempts(job.id);
 
@@ -99,6 +111,9 @@ export async function runWorkerOnce() {
 
     // 4) DONE + CLEANUP
     setStatus(job.id, "done", { error: null });
+
+    // Increment quota counter after successful upload
+    incrementUploadCount(config.quota.uploadCost);
 
     // CSV de controle (DONE)
     appendMappingRow({

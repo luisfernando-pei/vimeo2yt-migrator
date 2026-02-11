@@ -30,6 +30,15 @@ function init(db) {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique ON jobs(wp_post_id, vimeo_id);
     CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+
+    CREATE TABLE IF NOT EXISTS quota_tracking (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      upload_count INTEGER NOT NULL DEFAULT 0,
+      quota_used INTEGER NOT NULL DEFAULT 0,
+      date TEXT NOT NULL DEFAULT (date('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT OR IGNORE INTO quota_tracking (id) VALUES (1);
   `);
 }
 
@@ -80,4 +89,56 @@ export function stats() {
   `).all();
   const out = Object.fromEntries(rows.map(r => [r.status, r.n]));
   return out;
+}
+
+// Quota tracking functions
+export function getDailyQuotaStatus() {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT upload_count, quota_used, date, updated_at 
+    FROM quota_tracking 
+    WHERE id = 1
+  `).get();
+  
+  // Check if it's a new day, reset if needed
+  const today = new Date().toISOString().split('T')[0];
+  if (row && row.date !== today) {
+    resetDailyQuota();
+    return { upload_count: 0, quota_used: 0, date: today };
+  }
+  
+  return row || { upload_count: 0, quota_used: 0, date: today };
+}
+
+export function incrementUploadCount(uploadCost = 1600) {
+  const db = getDb();
+  const today = new Date().toISOString().split('T')[0];
+  
+  db.prepare(`
+    UPDATE quota_tracking 
+    SET upload_count = upload_count + 1,
+        quota_used = quota_used + ?,
+        date = ?,
+        updated_at = datetime('now')
+    WHERE id = 1
+  `).run(uploadCost, today);
+}
+
+export function resetDailyQuota() {
+  const db = getDb();
+  const today = new Date().toISOString().split('T')[0];
+  
+  db.prepare(`
+    UPDATE quota_tracking 
+    SET upload_count = 0,
+        quota_used = 0,
+        date = ?,
+        updated_at = datetime('now')
+    WHERE id = 1
+  `).run(today);
+}
+
+export function canUploadToday(maxUploadsPerDay) {
+  const status = getDailyQuotaStatus();
+  return status.upload_count < maxUploadsPerDay;
 }
