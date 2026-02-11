@@ -1,0 +1,20 @@
+{
+  "name": "vimeo2yt-migrator",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "migrate:qa": "NODE_ENV=qa node src/cli.js migrate",
+    "migrate:prod": "NODE_ENV=prod node src/cli.js migrate",
+    "fetch:qa": "NODE_ENV=qa node src/cli.js fetch",
+    "fetch:prod": "NODE_ENV=prod node src/cli.js fetch",
+    "status:qa": "NODE_ENV=qa node src/cli.js status",
+    "status:prod": "NODE_ENV=prod node src/cli.js status"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "better-sqlite3": "^11.5.0",
+    "dotenv": "^16.4.5",
+    "googleapis": "^144.0.0",
+    "p-limit": "^6.1.0"
+  }
+}
