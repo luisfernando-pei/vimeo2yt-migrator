@@ -73,6 +73,7 @@ export const config = {
     concurrency: Number(process.env.CONCURRENCY || 1),
     cleanupOk: process.env.CLEANUP_OK === "1",
     maxAttempts: Number(process.env.MAX_ATTEMPTS || 5),
+    delayBetweenUploadsMs: Number(process.env.DELAY_BETWEEN_UPLOADS_MS || 0),
   },
 };
 

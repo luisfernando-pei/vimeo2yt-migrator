@@ -64,20 +64,19 @@ function prepareYouTubeTags(tags) {
  * @param {string} params.vimeoUrl - URL do Vimeo
  * @param {string} params.vimeoId - ID do vídeo Vimeo
  * @param {number} params.wpPostId - ID do post WordPress
+ * @param {string} params.postUrl - URL da matéria no Brazil Journal
  * @returns {string} Descrição formatada
  */
-function buildDescription({ originalDescription, vimeoUrl, vimeoId, wpPostId }) {
+function buildDescription({ originalDescription, vimeoUrl, vimeoId, wpPostId, postUrl }) {
   const orig = (originalDescription || "").trim();
   
-  // Footer opcional com metadados de migração
-  // const footer =
-  //   `\n\n---\n` +
-  //   `Migrated from Vimeo: ${vimeoUrl || `https://vimeo.com/${vimeoId}`}\n` +
-  //   `Vimeo ID: ${vimeoId || ""}\n` +
-  //   `WP Post ID: ${wpPostId || ""}\n`;
+  // Footer com link da matéria (sempre adicionado no final)
+  const footer = postUrl 
+    ? `\n\nAssista no Brazil Journal: ${postUrl}`
+    : "";
 
-  // se não tinha descrição, não deixa começar com linha vazia
-  return (orig ? orig : "");
+  // Concatena descrição original + footer
+  return (orig ? orig : "") + footer;
 }
 
 /**
@@ -106,12 +105,13 @@ function youtubeClient() {
  * @param {string} params.vimeoUrl - URL original do Vimeo
  * @param {string} params.vimeoId - ID do vídeo Vimeo
  * @param {number} params.wpPostId - ID do post WordPress
+ * @param {string} params.postUrl - URL da matéria no Brazil Journal
  * @returns {Promise<Object>} Resultado do upload
  * @property {string} youtubeId - ID do vídeo no YouTube
  * @property {string} youtubeUrl - URL curta do YouTube
  * @throws {Error} Se falhar o upload ou não retornar ID
  */
-export async function uploadToYouTube({ filePath, title, description, tags, vimeoUrl, vimeoId, wpPostId }) {
+export async function uploadToYouTube({ filePath, title, description, tags, vimeoUrl, vimeoId, wpPostId, postUrl }) {
   logger.info(`Starting YouTube upload`, { filePath, vimeoId, hasTags: !!(tags && tags.length) });
 
   const yt = youtubeClient();
@@ -123,13 +123,17 @@ export async function uploadToYouTube({ filePath, title, description, tags, vime
   // Trunca título para limite do YouTube (100 caracteres)
   const finalTitle = truncateText((title || "").trim(), YouTubeQuota.MAX_TITLE_LENGTH) || `Video ${vimeoId || ""}`.trim() || "Video";
   
-  // Trunca descrição para limite do YouTube (5000 caracteres)
-  const finalDescription = truncateText(buildDescription({
+  // Constrói descrição com footer do Brazil Journal
+  const fullDescription = buildDescription({
     originalDescription: description,
     vimeoUrl,
     vimeoId,
-    wpPostId
-  }), YouTubeQuota.MAX_DESCRIPTION_LENGTH);
+    wpPostId,
+    postUrl
+  });
+  
+  // Trunca descrição para limite do YouTube (5000 caracteres)
+  const finalDescription = truncateText(fullDescription, YouTubeQuota.MAX_DESCRIPTION_LENGTH);
 
   // Prepara tags para YouTube
   const youTubeTags = prepareYouTubeTags(tags);

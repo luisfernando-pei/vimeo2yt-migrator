@@ -9,6 +9,15 @@ import { logger } from "./utils/logger.js";
 import { JobStatus } from "./constants.js";
 
 /**
+ * Utility function to sleep/delay for a specified time
+ * @param {number} ms - Milliseconds to sleep
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * Obtém o nome do ambiente atual
  * @returns {string} Nome do ambiente (qa, prod, dev)
  */
@@ -38,6 +47,30 @@ function parseTags(tagsJson) {
   } catch (e) {
     return [];
   }
+}
+
+/**
+ * Constrói a URL da matéria no Brazil Journal
+ * @param {Object} job - Job do banco de dados
+ * @returns {string|null} URL da matéria ou null
+ */
+function buildPostUrl(job) {
+  // Se o job já tem a URL completa, usa ela
+  if (job.post_url) {
+    return job.post_url;
+  }
+  
+  // Se tem slug, constrói a URL
+  if (job.slug) {
+    return `${config.wp.baseUrl}/play/${job.slug}`;
+  }
+  
+  // Fallback: tenta construir com ID (não ideal, mas funciona)
+  if (job.wp_post_id) {
+    return `${config.wp.baseUrl}/?p=${job.wp_post_id}`;
+  }
+  
+  return null;
 }
 
 /**
@@ -115,6 +148,9 @@ async function processFullJob(job) {
   const title = job.title || dl.title || `Video ${job.vimeo_id}`;
   const description = job.content || dl.description || "";
   
+  // Constrói URL da matéria para o footer
+  const postUrl = buildPostUrl(job);
+  
   const yt = await uploadToYouTube({
     filePath: dl.outPath,
     title: title,
@@ -123,6 +159,7 @@ async function processFullJob(job) {
     vimeoUrl: dl.vimeoUrl || job.vimeo_url,
     vimeoId: job.vimeo_id,
     wpPostId: job.wp_post_id,
+    postUrl: postUrl, // Novo parâmetro para o footer
   });
 
   // 3) UPDATE WP
@@ -161,7 +198,8 @@ async function processFullJob(job) {
   logger.info(`Job completed`, { 
     jobId: job.id, 
     youtubeUrl: yt.youtubeUrl,
-    title: title.substring(0, 50)
+    title: title.substring(0, 50),
+    postUrl: postUrl
   });
   
   return true;
@@ -263,6 +301,16 @@ export async function runWorkerLoop() {
     const worked = await runWorkerOnce();
     if (!worked) break;
     processedCount++;
+    
+    // Delay entre uploads - só aplica se configurado (> 0)
+    const delayMs = config.worker.delayBetweenUploadsMs;
+    if (delayMs && delayMs > 0) {
+      logger.info(`Waiting ${delayMs}ms before next upload...`, { 
+        jobCount: processedCount, 
+        delayMs 
+      });
+      await sleep(delayMs);
+    }
   }
   
   logger.info("Worker loop finished", { processedCount });
