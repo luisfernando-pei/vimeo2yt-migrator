@@ -35,6 +35,8 @@ function init(db) {
       title TEXT,
       content TEXT,
       tags TEXT,
+      slug TEXT,
+      post_url TEXT,
       status TEXT NOT NULL DEFAULT 'queued',
       attempts INTEGER NOT NULL DEFAULT 0,
       local_path TEXT,
@@ -50,20 +52,20 @@ function init(db) {
   `);
   
   // Migration: add new columns if they don't exist (for existing databases)
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN title TEXT`);
-  } catch (e) {
-    // Column already exists, ignore
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN content TEXT`);
-  } catch (e) {
-    // Column already exists, ignore
-  }
-  try {
-    db.exec(`ALTER TABLE jobs ADD COLUMN tags TEXT`);
-  } catch (e) {
-    // Column already exists, ignore
+  const migrations = [
+    'ALTER TABLE jobs ADD COLUMN title TEXT',
+    'ALTER TABLE jobs ADD COLUMN content TEXT',
+    'ALTER TABLE jobs ADD COLUMN tags TEXT',
+    'ALTER TABLE jobs ADD COLUMN slug TEXT',
+    'ALTER TABLE jobs ADD COLUMN post_url TEXT',
+  ];
+  
+  for (const sql of migrations) {
+    try {
+      db.exec(sql);
+    } catch (e) {
+      // Column already exists, ignore
+    }
   }
 }
 
@@ -79,22 +81,33 @@ function init(db) {
  * @param {string} [params.title] - Título do post WordPress
  * @param {string} [params.content] - Conteúdo do post WordPress
  * @param {string[]} [params.tags] - Tags do post WordPress
+ * @param {string} [params.slug] - Slug do post WordPress
+ * @param {string} [params.post_url] - URL completa do post WordPress
  * @returns {boolean} true se inseriu novo job, false se já existia
  */
-export function upsertJob({ wp_post_id, vimeo_url, vimeo_id, title, content, tags }) {
+export function upsertJob({ wp_post_id, vimeo_url, vimeo_id, title, content, tags, slug, post_url }) {
   const db = getDb();
   
   // Converte array de tags para string JSON
   const tagsJson = tags && Array.isArray(tags) ? JSON.stringify(tags) : null;
   
   const stmt = db.prepare(`
-    INSERT INTO jobs (wp_post_id, vimeo_url, vimeo_id, title, content, tags, status)
-    VALUES (?, ?, ?, ?, ?, ?, '${JobStatus.QUEUED}')
+    INSERT INTO jobs (wp_post_id, vimeo_url, vimeo_id, title, content, tags, slug, post_url, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, '${JobStatus.QUEUED}')
     ON CONFLICT(wp_post_id, vimeo_id) DO NOTHING
   `);
-  const result = stmt.run(wp_post_id, vimeo_url, vimeo_id, title || null, content || null, tagsJson);
+  const result = stmt.run(
+    wp_post_id, 
+    vimeo_url, 
+    vimeo_id, 
+    title || null, 
+    content || null, 
+    tagsJson,
+    slug || null,
+    post_url || null
+  );
   if (result.changes > 0) {
-    logger.debug(`Job inserted`, { wp_post_id, vimeo_id, title });
+    logger.debug(`Job inserted`, { wp_post_id, vimeo_id, title, slug });
     return true;
   }
   return false;

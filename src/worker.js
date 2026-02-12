@@ -50,30 +50,6 @@ function parseTags(tagsJson) {
 }
 
 /**
- * Constrói a URL da matéria no Brazil Journal
- * @param {Object} job - Job do banco de dados
- * @returns {string|null} URL da matéria ou null
- */
-function buildPostUrl(job) {
-  // Se o job já tem a URL completa, usa ela
-  if (job.post_url) {
-    return job.post_url;
-  }
-  
-  // Se tem slug, constrói a URL
-  if (job.slug) {
-    return `${config.wp.baseUrl}/play/${job.slug}`;
-  }
-  
-  // Fallback: tenta construir com ID (não ideal, mas funciona)
-  if (job.wp_post_id) {
-    return `${config.wp.baseUrl}/?p=${job.wp_post_id}`;
-  }
-  
-  return null;
-}
-
-/**
  * Processa um job que já foi uploadado (tenta apenas atualizar WP)
  * @param {Object} job - Job do banco de dados
  * @returns {Promise<boolean>}
@@ -148,8 +124,8 @@ async function processFullJob(job) {
   const title = job.title || dl.title || `Video ${job.vimeo_id}`;
   const description = job.content || dl.description || "";
   
-  // Constrói URL da matéria para o footer
-  const postUrl = buildPostUrl(job);
+  // Usa post_url do banco de dados (vindo do WordPress)
+  const postUrl = job.post_url || null;
   
   const yt = await uploadToYouTube({
     filePath: dl.outPath,
@@ -159,7 +135,7 @@ async function processFullJob(job) {
     vimeoUrl: dl.vimeoUrl || job.vimeo_url,
     vimeoId: job.vimeo_id,
     wpPostId: job.wp_post_id,
-    postUrl: postUrl, // Novo parâmetro para o footer
+    postUrl: postUrl, // URL completa da matéria vinda do WordPress
   });
 
   // 3) UPDATE WP
@@ -271,7 +247,8 @@ export async function runWorkerOnce() {
     vimeoId: job.vimeo_id,
     attempt: job.attempts + 1,
     hasWpTitle: !!job.title,
-    hasWpContent: !!job.content
+    hasWpContent: !!job.content,
+    hasPostUrl: !!job.post_url
   });
 
   try {
