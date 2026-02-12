@@ -7,3 +7,6 @@ logs/*
 *.sqlite
 TODO.md
 backup/
+check-content.php
+check-post-content.sh
+wordpress-plugin-updated.php

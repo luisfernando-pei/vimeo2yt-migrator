@@ -42,10 +42,14 @@ export async function fetchAndQueue({ force = false } = {}) {
         continue;
       }
       
+      // Passa title, content e tags do WordPress para o job
       const result = upsertJob({ 
         wp_post_id: it.id, 
         vimeo_url: it.vimeo_url, 
-        vimeo_id: vimeoId 
+        vimeo_id: vimeoId,
+        title: it.title,
+        content: it.content,
+        tags: it.tags
       });
       
       // upsertJob retorna true se inseriu, false se já existia

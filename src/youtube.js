@@ -3,12 +3,64 @@ import { google } from "googleapis";
 import { config } from "./config.js";
 import { makeSpeedMeter } from "./metrics.js";
 import { logger } from "./utils/logger.js";
-import { UploadConfig, ErrorMessages } from "./constants.js";
+import { UploadConfig, YouTubeQuota, ErrorMessages } from "./constants.js";
+
+/**
+ * Trunca texto para limite máximo do YouTube
+ * @param {string} text - Texto original
+ * @param {number} maxLength - Limite máximo
+ * @returns {string} Texto truncado
+ */
+function truncateText(text, maxLength) {
+  if (!text || text.length <= maxLength) return text || "";
+  return text.substring(0, maxLength - 3) + "...";
+}
+
+/**
+ * Prepara tags para o YouTube (máx 500 chars total, 30 tags)
+ * @param {string[]} tags - Array de tags
+ * @returns {string[]} Tags formatadas para YouTube
+ */
+function prepareYouTubeTags(tags) {
+  if (!tags || !Array.isArray(tags) || tags.length === 0) {
+    return [];
+  }
+
+  // YouTube limit: 500 characters total for all tags, max 30 tags
+  const maxTags = 30;
+  const maxTotalLength = 500;
+  
+  const processedTags = [];
+  let totalLength = 0;
+
+  for (const tag of tags.slice(0, maxTags)) {
+    // Remove caracteres inválidos para tags do YouTube
+    // Apenas letras, números, espaços e caracteres especiais básicos
+    let cleanTag = String(tag)
+      .replace(/[<>]/g, '') // Remove < e >
+      .trim();
+    
+    if (cleanTag.length === 0) continue;
+    
+    // YouTube tags são separadas por vírgula, então não pode ter vírgula na tag
+    cleanTag = cleanTag.replace(/,/g, ' ');
+    
+    // Verifica se cabe no limite total
+    if (totalLength + cleanTag.length + 2 > maxTotalLength) { // +2 para ", "
+      break;
+    }
+    
+    processedTags.push(cleanTag);
+    totalLength += cleanTag.length + 2;
+  }
+
+  return processedTags;
+}
 
 /**
  * Constrói a descrição do vídeo para YouTube
  * @param {Object} params
- * @param {string} params.originalDescription - Descrição original do Vimeo
+ * @param {string} params.originalDescription - Descrição original do WordPress/Vimeo
  * @param {string} params.vimeoUrl - URL do Vimeo
  * @param {string} params.vimeoId - ID do vídeo Vimeo
  * @param {number} params.wpPostId - ID do post WordPress
@@ -16,7 +68,8 @@ import { UploadConfig, ErrorMessages } from "./constants.js";
  */
 function buildDescription({ originalDescription, vimeoUrl, vimeoId, wpPostId }) {
   const orig = (originalDescription || "").trim();
-  const footer = "";
+  
+  // Footer opcional com metadados de migração
   // const footer =
   //   `\n\n---\n` +
   //   `Migrated from Vimeo: ${vimeoUrl || `https://vimeo.com/${vimeoId}`}\n` +
@@ -24,7 +77,7 @@ function buildDescription({ originalDescription, vimeoUrl, vimeoId, wpPostId }) 
   //   `WP Post ID: ${wpPostId || ""}\n`;
 
   // se não tinha descrição, não deixa começar com linha vazia
-  return (orig ? orig + footer : footer.trim());
+  return (orig ? orig : "");
 }
 
 /**
@@ -49,6 +102,7 @@ function youtubeClient() {
  * @param {string} params.filePath - Caminho do arquivo local
  * @param {string} params.title - Título do vídeo
  * @param {string} params.description - Descrição do vídeo
+ * @param {string[]} [params.tags] - Tags do vídeo (opcional)
  * @param {string} params.vimeoUrl - URL original do Vimeo
  * @param {string} params.vimeoId - ID do vídeo Vimeo
  * @param {number} params.wpPostId - ID do post WordPress
@@ -57,8 +111,8 @@ function youtubeClient() {
  * @property {string} youtubeUrl - URL curta do YouTube
  * @throws {Error} Se falhar o upload ou não retornar ID
  */
-export async function uploadToYouTube({ filePath, title, description, vimeoUrl, vimeoId, wpPostId }) {
-  logger.info(`Starting YouTube upload`, { filePath, vimeoId });
+export async function uploadToYouTube({ filePath, title, description, tags, vimeoUrl, vimeoId, wpPostId }) {
+  logger.info(`Starting YouTube upload`, { filePath, vimeoId, hasTags: !!(tags && tags.length) });
 
   const yt = youtubeClient();
   const fileSize = fs.statSync(filePath).size;
@@ -66,12 +120,25 @@ export async function uploadToYouTube({ filePath, title, description, vimeoUrl, 
   const meter = makeSpeedMeter();
   let lastLog = Date.now();
 
-  const finalTitle = (title || "").trim() || `Video ${vimeoId || ""}`.trim() || "Video";
-  const finalDescription = buildDescription({
+  // Trunca título para limite do YouTube (100 caracteres)
+  const finalTitle = truncateText((title || "").trim(), YouTubeQuota.MAX_TITLE_LENGTH) || `Video ${vimeoId || ""}`.trim() || "Video";
+  
+  // Trunca descrição para limite do YouTube (5000 caracteres)
+  const finalDescription = truncateText(buildDescription({
     originalDescription: description,
     vimeoUrl,
     vimeoId,
     wpPostId
+  }), YouTubeQuota.MAX_DESCRIPTION_LENGTH);
+
+  // Prepara tags para YouTube
+  const youTubeTags = prepareYouTubeTags(tags);
+
+  logger.debug(`YouTube upload params`, {
+    titleLength: finalTitle.length,
+    descriptionLength: finalDescription.length,
+    tagsCount: youTubeTags.length,
+    tagsTotalLength: youTubeTags.join(", ").length
   });
 
   const res = await yt.videos.insert(
@@ -81,7 +148,8 @@ export async function uploadToYouTube({ filePath, title, description, vimeoUrl, 
         snippet: {
           title: finalTitle,
           description: finalDescription,
-          categoryId: UploadConfig.DEFAULT_CATEGORY_ID
+          categoryId: UploadConfig.DEFAULT_CATEGORY_ID,
+          tags: youTubeTags, // Tags do WordPress
         },
         status: {
           privacyStatus: config.yt.privacyStatus || UploadConfig.DEFAULT_PRIVACY_STATUS,
@@ -124,7 +192,9 @@ export async function uploadToYouTube({ filePath, title, description, vimeoUrl, 
     vimeoId, 
     youtubeId, 
     youtubeUrl,
-    fileSize 
+    fileSize,
+    title: finalTitle.substring(0, 50),
+    tagsUsed: youTubeTags.length
   });
 
   return { youtubeId, youtubeUrl };

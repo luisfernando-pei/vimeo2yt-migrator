@@ -32,7 +32,10 @@ function init(db) {
       wp_post_id INTEGER NOT NULL,
       vimeo_url TEXT NOT NULL,
       vimeo_id TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT '${JobStatus.QUEUED}',
+      title TEXT,
+      content TEXT,
+      tags TEXT,
+      status TEXT NOT NULL DEFAULT 'queued',
       attempts INTEGER NOT NULL DEFAULT 0,
       local_path TEXT,
       file_size_bytes INTEGER,
@@ -45,7 +48,25 @@ function init(db) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique ON jobs(wp_post_id, vimeo_id);
     CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
   `);
+  
+  // Migration: add new columns if they don't exist (for existing databases)
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN title TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN content TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN tags TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
 }
+
 
 
 /**
@@ -55,18 +76,25 @@ function init(db) {
  * @param {number} params.wp_post_id - ID do post WordPress
  * @param {string} params.vimeo_url - URL do vídeo Vimeo
  * @param {string} params.vimeo_id - ID do vídeo Vimeo
+ * @param {string} [params.title] - Título do post WordPress
+ * @param {string} [params.content] - Conteúdo do post WordPress
+ * @param {string[]} [params.tags] - Tags do post WordPress
  * @returns {boolean} true se inseriu novo job, false se já existia
  */
-export function upsertJob({ wp_post_id, vimeo_url, vimeo_id }) {
+export function upsertJob({ wp_post_id, vimeo_url, vimeo_id, title, content, tags }) {
   const db = getDb();
+  
+  // Converte array de tags para string JSON
+  const tagsJson = tags && Array.isArray(tags) ? JSON.stringify(tags) : null;
+  
   const stmt = db.prepare(`
-    INSERT INTO jobs (wp_post_id, vimeo_url, vimeo_id, status)
-    VALUES (?, ?, ?, '${JobStatus.QUEUED}')
+    INSERT INTO jobs (wp_post_id, vimeo_url, vimeo_id, title, content, tags, status)
+    VALUES (?, ?, ?, ?, ?, ?, '${JobStatus.QUEUED}')
     ON CONFLICT(wp_post_id, vimeo_id) DO NOTHING
   `);
-  const result = stmt.run(wp_post_id, vimeo_url, vimeo_id);
+  const result = stmt.run(wp_post_id, vimeo_url, vimeo_id, title || null, content || null, tagsJson);
   if (result.changes > 0) {
-    logger.debug(`Job inserted`, { wp_post_id, vimeo_id });
+    logger.debug(`Job inserted`, { wp_post_id, vimeo_id, title });
     return true;
   }
   return false;

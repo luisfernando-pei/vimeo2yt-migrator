@@ -26,6 +26,21 @@ function isAlreadyUploaded(job) {
 }
 
 /**
+ * Parse tags from JSON string
+ * @param {string|null} tagsJson 
+ * @returns {string[]}
+ */
+function parseTags(tagsJson) {
+  if (!tagsJson) return [];
+  try {
+    const parsed = JSON.parse(tagsJson);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
  * Processa um job que já foi uploadado (tenta apenas atualizar WP)
  * @param {Object} job - Job do banco de dados
  * @returns {Promise<boolean>}
@@ -57,7 +72,7 @@ async function processResumeJob(job) {
     wpPostId: job.wp_post_id,
     vimeoId: job.vimeo_id,
     vimeoUrl: job.vimeo_url || `https://vimeo.com/${job.vimeo_id}`,
-    vimeoTitle: "",
+    vimeoTitle: job.title || "",
     youtubeId: job.youtube_id || "",
     youtubeUrl: job.youtube_url,
     status: "done_resume",
@@ -80,6 +95,9 @@ async function processResumeJob(job) {
 async function processFullJob(job) {
   const env = getEnvName();
 
+  // Parse tags from JSON
+  const tags = parseTags(job.tags);
+
   // 1) DOWNLOAD
   setStatus(job.id, JobStatus.DOWNLOADING);
   const dl = await downloadVimeoToFile({ 
@@ -87,16 +105,21 @@ async function processFullJob(job) {
     outDir: config.tmpDir 
   });
 
-  // 2) UPLOAD YT
+  // 2) UPLOAD YT - Usa title/content do WordPress, com fallback para Vimeo
   setStatus(job.id, JobStatus.UPLOADING, {
     local_path: dl.outPath,
     file_size_bytes: dl.fileSize,
   });
 
+  // Prioriza dados do WordPress, fallback para Vimeo se não existir
+  const title = job.title || dl.title || `Video ${job.vimeo_id}`;
+  const description = job.content || dl.description || "";
+  
   const yt = await uploadToYouTube({
     filePath: dl.outPath,
-    title: dl.title,
-    description: dl.description,
+    title: title,
+    description: description,
+    tags: tags,
     vimeoUrl: dl.vimeoUrl || job.vimeo_url,
     vimeoId: job.vimeo_id,
     wpPostId: job.wp_post_id,
@@ -123,7 +146,7 @@ async function processFullJob(job) {
     wpPostId: job.wp_post_id,
     vimeoId: job.vimeo_id,
     vimeoUrl: dl.vimeoUrl || job.vimeo_url,
-    vimeoTitle: dl.title || "",
+    vimeoTitle: title,
     youtubeId: yt.youtubeId,
     youtubeUrl: yt.youtubeUrl,
     status: "done",
@@ -137,7 +160,8 @@ async function processFullJob(job) {
 
   logger.info(`Job completed`, { 
     jobId: job.id, 
-    youtubeUrl: yt.youtubeUrl 
+    youtubeUrl: yt.youtubeUrl,
+    title: title.substring(0, 50)
   });
   
   return true;
@@ -175,7 +199,7 @@ async function handleJobError(job, error) {
     wpPostId: job.wp_post_id,
     vimeoId: job.vimeo_id,
     vimeoUrl: job.vimeo_url || `https://vimeo.com/${job.vimeo_id}`,
-    vimeoTitle: "",
+    vimeoTitle: job.title || "",
     youtubeId: "",
     youtubeUrl: "",
     status: "failed",
@@ -207,7 +231,9 @@ export async function runWorkerOnce() {
     jobId: job.id,
     postId: job.wp_post_id,
     vimeoId: job.vimeo_id,
-    attempt: job.attempts + 1
+    attempt: job.attempts + 1,
+    hasWpTitle: !!job.title,
+    hasWpContent: !!job.content
   });
 
   try {

@@ -45,6 +45,14 @@ export const YouTubeQuota = {
   DEFAULT_DAILY_QUOTA: 10000,
   /** Buffer de segurança (não usar 100% da quota) */
   SAFETY_BUFFER_PERCENT: 0.95,
+  /** Limite máximo de caracteres no título do vídeo */
+  MAX_TITLE_LENGTH: 100,
+  /** Limite máximo de caracteres na descrição do vídeo */
+  MAX_DESCRIPTION_LENGTH: 5000,
+  /** Limite total de caracteres em todas as tags */
+  MAX_TAGS_TOTAL_LENGTH: 500,
+  /** Número máximo de tags permitidas */
+  MAX_TAGS_COUNT: 30,
 };
 
 /**
