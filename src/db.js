@@ -55,6 +55,7 @@ function init(db) {
  * @param {number} params.wp_post_id - ID do post WordPress
  * @param {string} params.vimeo_url - URL do vídeo Vimeo
  * @param {string} params.vimeo_id - ID do vídeo Vimeo
+ * @returns {boolean} true se inseriu novo job, false se já existia
  */
 export function upsertJob({ wp_post_id, vimeo_url, vimeo_id }) {
   const db = getDb();
@@ -66,7 +67,9 @@ export function upsertJob({ wp_post_id, vimeo_url, vimeo_id }) {
   const result = stmt.run(wp_post_id, vimeo_url, vimeo_id);
   if (result.changes > 0) {
     logger.debug(`Job inserted`, { wp_post_id, vimeo_id });
+    return true;
   }
+  return false;
 }
 
 /**

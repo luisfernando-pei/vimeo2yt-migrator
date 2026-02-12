@@ -18,6 +18,7 @@ export async function fetchAndQueue({ force = false } = {}) {
   let page = 1;
   let queued = 0;
   let fetchedItems = 0;
+  let skipped = 0;
 
   logger.info(`Starting fetch and queue`, { force, batchSize: config.wp.batchSize });
 
@@ -29,6 +30,7 @@ export async function fetchAndQueue({ force = false } = {}) {
 
     fetchedItems += items.length;
 
+    let pageQueued = 0;
     for (const it of items) {
       const vimeoId = parseVimeoId(it.vimeo_url);
       if (!vimeoId) {
@@ -36,21 +38,31 @@ export async function fetchAndQueue({ force = false } = {}) {
           postId: it.id, 
           url: it.vimeo_url 
         });
+        skipped++;
         continue;
       }
       
-      upsertJob({ 
+      const result = upsertJob({ 
         wp_post_id: it.id, 
         vimeo_url: it.vimeo_url, 
         vimeo_id: vimeoId 
       });
-      queued++;
+      
+      // upsertJob retorna true se inseriu, false se já existia
+      if (result) {
+        queued++;
+        pageQueued++;
+      } else {
+        skipped++;
+      }
     }
 
     logger.info(`Page ${page} processed`, { 
       items: items.length, 
-      queued: items.length,
-      totalQueued: queued 
+      queued: pageQueued,
+      skipped: items.length - pageQueued,
+      totalQueued: queued,
+      totalSkipped: skipped
     });
 
     // Verifica limites de paginação
@@ -70,8 +82,9 @@ export async function fetchAndQueue({ force = false } = {}) {
   logger.info(`Fetch and queue completed`, { 
     fetched: fetchedItems, 
     queued, 
+    skipped,
     pages: page 
   });
 
-  return { fetched: fetchedItems, queued, pages: page };
+  return { fetched: fetchedItems, queued, skipped, pages: page };
 }
