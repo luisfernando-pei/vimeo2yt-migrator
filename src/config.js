@@ -2,25 +2,49 @@ import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
 
+/**
+ * Carrega variáveis de ambiente do arquivo .env apropriado
+ * baseado no NODE_ENV (qa ou prod)
+ */
 const nodeEnv = process.env.NODE_ENV || "qa";
 const envFile = nodeEnv === "prod" ? ".env.prod" : ".env.qa";
 
 dotenv.config({ path: envFile });
 
+/**
+ * Valida e retorna variável de ambiente obrigatória
+ * @param {string} name - Nome da variável
+ * @returns {string} Valor da variável
+ * @throws {Error} Se a variável não estiver definida
+ */
 function must(name) {
   const v = process.env[name];
   if (!v) throw new Error(`Missing env var: ${name} (from ${envFile})`);
   return v;
 }
 
+/**
+ * Configuração centralizada do sistema
+ * Todas as configurações são carregadas de variáveis de ambiente
+ * com valores padrão sensatos
+ */
 export const config = {
+  /** Ambiente da aplicação (qa, prod) */
   appEnv: must("APP_ENV"),
+  
+  /** Caminho do banco de dados SQLite */
   dbPath: must("DB_PATH"),
+  
+  /** Diretório temporário para downloads */
   tmpDir: must("TMP_DIR"),
+  
+  /** Caminho do arquivo de log */
   logFile: must("LOG_FILE"),
 
+  /** Token de API do Vimeo */
   vimeoToken: must("VIMEO_TOKEN"),
 
+  /** Configurações do YouTube */
   yt: {
     clientId: must("YT_CLIENT_ID"),
     clientSecret: must("YT_CLIENT_SECRET"),
@@ -29,6 +53,7 @@ export const config = {
     privacyStatus: process.env.YT_PRIVACY_STATUS || "unlisted",
   },
 
+  /** Configurações do WordPress */
   wp: {
     appUser: must("WP_APP_USER"),
     appPass: must("WP_APP_PASS"),
@@ -43,26 +68,29 @@ export const config = {
     fetchMaxPages: Number(process.env.FETCH_MAX_PAGES || 0),
   },
 
+  /** Configurações do worker */
   worker: {
     concurrency: Number(process.env.CONCURRENCY || 1),
     cleanupOk: process.env.CLEANUP_OK === "1",
     maxAttempts: Number(process.env.MAX_ATTEMPTS || 5),
   },
-
-  quota: {
-    // YouTube API v3 daily quota limit (default: 10,000 units)
-    dailyLimit: Number(process.env.YT_DAILY_QUOTA_LIMIT || 10000),
-    // Each video.insert costs approximately 1600 units
-    uploadCost: 1600,
-    // Calculate max uploads per day (conservative: 6 uploads with 10k quota)
-    get maxUploadsPerDay() {
-      return Math.floor(this.dailyLimit / this.uploadCost);
-    },
-  },
 };
 
+/**
+ * Garante que os diretórios necessários existem
+ * Cria recursivamente se não existirem
+ */
 export function ensureDirs() {
-  for (const p of [path.dirname(config.dbPath), config.tmpDir, "logs"]) {
-    if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+  const dirs = [
+    path.dirname(config.dbPath),
+    config.tmpDir,
+    "logs",
+    "data"
+  ];
+  
+  for (const p of dirs) {
+    if (!fs.existsSync(p)) {
+      fs.mkdirSync(p, { recursive: true });
+    }
   }
 }

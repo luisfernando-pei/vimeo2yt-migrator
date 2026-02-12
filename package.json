@@ -1,14 +1,35 @@
 {
   "name": "vimeo2yt-migrator",
   "version": "1.0.0",
+  "description": "Sistema de migração de vídeos do Vimeo para YouTube com controle de quota e retomada",
   "type": "module",
+  "main": "src/cli.js",
   "scripts": {
     "migrate:qa": "NODE_ENV=qa node src/cli.js migrate",
     "migrate:prod": "NODE_ENV=prod node src/cli.js migrate",
     "fetch:qa": "NODE_ENV=qa node src/cli.js fetch",
     "fetch:prod": "NODE_ENV=prod node src/cli.js fetch",
     "status:qa": "NODE_ENV=qa node src/cli.js status",
-    "status:prod": "NODE_ENV=prod node src/cli.js status"
+    "status:prod": "NODE_ENV=prod node src/cli.js status",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "test": "node --test tests/**/*.test.js",
+    "docs": "jsdoc -c jsdoc.json",
+    "start": "node src/cli.js"
+  },
+  "keywords": [
+    "vimeo",
+    "youtube",
+    "migration",
+    "video",
+    "wordpress",
+    "oracle-cloud",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "axios": "^1.7.7",
@@ -16,5 +37,8 @@
     "dotenv": "^16.4.5",
     "googleapis": "^144.0.0",
     "p-limit": "^6.1.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
   }
 }

@@ -1,16 +1,30 @@
 import Database from "better-sqlite3";
 import { config } from "./config.js";
+import { logger } from "./utils/logger.js";
+import { DatabaseConfig, JobStatus } from "./constants.js";
 
 let db;
 
+/**
+ * Obtém instância do banco de dados (singleton)
+ * Inicializa com WAL mode para melhor concorrência
+ * @returns {Database} Instância do better-sqlite3
+ */
 export function getDb() {
   if (db) return db;
   db = new Database(config.dbPath);
-  db.pragma("journal_mode = WAL");
+  db.pragma(`journal_mode = ${DatabaseConfig.JOURNAL_MODE}`);
+  db.pragma(`busy_timeout = ${DatabaseConfig.BUSY_TIMEOUT_MS}`);
   init(db);
+  logger.debug("Database initialized", { path: config.dbPath });
   return db;
 }
 
+/**
+ * Inicializa schema do banco de dados
+ * @private
+ * @param {Database} db - Instância do banco
+ */
 function init(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS jobs (
@@ -18,7 +32,7 @@ function init(db) {
       wp_post_id INTEGER NOT NULL,
       vimeo_url TEXT NOT NULL,
       vimeo_id TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'queued',
+      status TEXT NOT NULL DEFAULT '${JobStatus.QUEUED}',
       attempts INTEGER NOT NULL DEFAULT 0,
       local_path TEXT,
       file_size_bytes INTEGER,
@@ -30,40 +44,59 @@ function init(db) {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique ON jobs(wp_post_id, vimeo_id);
     CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
-
-    CREATE TABLE IF NOT EXISTS quota_tracking (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      upload_count INTEGER NOT NULL DEFAULT 0,
-      quota_used INTEGER NOT NULL DEFAULT 0,
-      date TEXT NOT NULL DEFAULT (date('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    INSERT OR IGNORE INTO quota_tracking (id) VALUES (1);
   `);
 }
 
+
+/**
+ * Insere ou ignora job na fila
+ * Usa ON CONFLICT para evitar duplicatas (wp_post_id + vimeo_id)
+ * @param {Object} params
+ * @param {number} params.wp_post_id - ID do post WordPress
+ * @param {string} params.vimeo_url - URL do vídeo Vimeo
+ * @param {string} params.vimeo_id - ID do vídeo Vimeo
+ */
 export function upsertJob({ wp_post_id, vimeo_url, vimeo_id }) {
   const db = getDb();
   const stmt = db.prepare(`
     INSERT INTO jobs (wp_post_id, vimeo_url, vimeo_id, status)
-    VALUES (?, ?, ?, 'queued')
+    VALUES (?, ?, ?, '${JobStatus.QUEUED}')
     ON CONFLICT(wp_post_id, vimeo_id) DO NOTHING
   `);
-  stmt.run(wp_post_id, vimeo_url, vimeo_id);
+  const result = stmt.run(wp_post_id, vimeo_url, vimeo_id);
+  if (result.changes > 0) {
+    logger.debug(`Job inserted`, { wp_post_id, vimeo_id });
+  }
 }
 
+/**
+ * Busca próximo job disponível para processamento
+ * Prioriza jobs mais antigos (updated_at ASC)
+ * @returns {Object|null} Job encontrado ou null se vazio
+ */
 export function nextJob() {
   const db = getDb();
   const row = db.prepare(`
     SELECT * FROM jobs
-    WHERE status IN ('queued','failed')
+    WHERE status IN ('${JobStatus.QUEUED}','${JobStatus.FAILED}')
       AND attempts < ?
     ORDER BY updated_at ASC
     LIMIT 1
   `).get(config.worker.maxAttempts);
+  
+  if (row) {
+    logger.debug(`Next job selected`, { jobId: row.id, vimeoId: row.vimeo_id });
+  }
+  
   return row || null;
 }
 
+/**
+ * Atualiza status e campos adicionais de um job
+ * @param {number} id - ID do job
+ * @param {string} status - Novo status (use JobStatus constants)
+ * @param {Object} [patch={}] - Campos adicionais para atualizar
+ */
 export function setStatus(id, status, patch = {}) {
   const db = getDb();
   const fields = { ...patch, status, updated_at: new Date().toISOString() };
@@ -71,8 +104,13 @@ export function setStatus(id, status, patch = {}) {
   const setSql = cols.map((c) => `${c} = ?`).join(", ");
   const values = cols.map((c) => fields[c]);
   db.prepare(`UPDATE jobs SET ${setSql} WHERE id = ?`).run(...values, id);
+  logger.debug(`Job status updated`, { jobId: id, status });
 }
 
+/**
+ * Incrementa contador de tentativas do job
+ * @param {number} id - ID do job
+ */
 export function incAttempts(id) {
   const db = getDb();
   db.prepare(`
@@ -80,14 +118,20 @@ export function incAttempts(id) {
     SET attempts = attempts + 1, updated_at = ?
     WHERE id = ?
   `).run(new Date().toISOString(), id);
+  logger.debug(`Job attempt incremented`, { jobId: id });
 }
 
+/**
+ * Retorna estatísticas de jobs por status
+ * @returns {Object} Contagem por status { queued: 10, done: 5, ... }
+ */
 export function stats() {
   const db = getDb();
   const rows = db.prepare(`
     SELECT status, COUNT(*) as n FROM jobs GROUP BY status
   `).all();
   const out = Object.fromEntries(rows.map(r => [r.status, r.n]));
+  logger.debug(`Stats retrieved`, out);
   return out;
 }
 
