@@ -58,6 +58,25 @@ function prepareYouTubeTags(tags) {
 }
 
 /**
+ * Formata data ISO para formato brasileiro (DD/MM/YYYY)
+ * @param {string} isoDate - Data em formato ISO 8601
+ * @returns {string} Data formatada ou string vazia se inválida
+ */
+function formatDateBR(isoDate) {
+  if (!isoDate) return "";
+  try {
+    const date = new Date(isoDate);
+    return date.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    });
+  } catch (e) {
+    return "";
+  }
+}
+
+/**
  * Constrói a descrição do vídeo para YouTube
  * @param {Object} params
  * @param {string} params.originalDescription - Descrição original do WordPress/Vimeo
@@ -65,18 +84,25 @@ function prepareYouTubeTags(tags) {
  * @param {string} params.vimeoId - ID do vídeo Vimeo
  * @param {number} params.wpPostId - ID do post WordPress
  * @param {string} params.postUrl - URL da matéria no Brazil Journal
+ * @param {string} params.createdTime - Data de criação no Vimeo (ISO 8601)
  * @returns {string} Descrição formatada
  */
-function buildDescription({ originalDescription, vimeoUrl, vimeoId, wpPostId, postUrl }) {
+function buildDescription({ originalDescription, vimeoUrl, vimeoId, wpPostId, postUrl, createdTime }) {
   const orig = (originalDescription || "").trim();
+  
+  // Data de publicação no início da descrição
+  const formattedDate = formatDateBR(createdTime);
+  const dateHeader = formattedDate 
+    ? `Publicado em: ${formattedDate}\n\n`
+    : "";
   
   // Footer com link da matéria (sempre adicionado no final)
   const footer = postUrl 
     ? `\n\nAssista no Brazil Journal: ${postUrl}`
     : "";
 
-  // Concatena descrição original + footer
-  return (orig ? orig : "") + footer;
+  // Concatena: data + descrição original + footer
+  return dateHeader + (orig ? orig : "") + footer;
 }
 
 /**
@@ -106,12 +132,13 @@ function youtubeClient() {
  * @param {string} params.vimeoId - ID do vídeo Vimeo
  * @param {number} params.wpPostId - ID do post WordPress
  * @param {string} params.postUrl - URL da matéria no Brazil Journal
+ * @param {string} params.createdTime - Data de criação no Vimeo (ISO 8601)
  * @returns {Promise<Object>} Resultado do upload
  * @property {string} youtubeId - ID do vídeo no YouTube
  * @property {string} youtubeUrl - URL curta do YouTube
  * @throws {Error} Se falhar o upload ou não retornar ID
  */
-export async function uploadToYouTube({ filePath, title, description, tags, vimeoUrl, vimeoId, wpPostId, postUrl }) {
+export async function uploadToYouTube({ filePath, title, description, tags, vimeoUrl, vimeoId, wpPostId, postUrl, createdTime }) {
   logger.info(`Starting YouTube upload`, { filePath, vimeoId, hasTags: !!(tags && tags.length) });
 
   const yt = youtubeClient();
@@ -123,13 +150,14 @@ export async function uploadToYouTube({ filePath, title, description, tags, vime
   // Trunca título para limite do YouTube (100 caracteres)
   const finalTitle = truncateText((title || "").trim(), YouTubeQuota.MAX_TITLE_LENGTH) || `Video ${vimeoId || ""}`.trim() || "Video";
   
-  // Constrói descrição com footer do Brazil Journal
+  // Constrói descrição com data de publicação e footer do Brazil Journal
   const fullDescription = buildDescription({
     originalDescription: description,
     vimeoUrl,
     vimeoId,
     wpPostId,
-    postUrl
+    postUrl,
+    createdTime
   });
   
   // Trunca descrição para limite do YouTube (5000 caracteres)

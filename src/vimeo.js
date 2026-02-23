@@ -45,6 +45,7 @@ export async function getVimeoDownloadUrl(vimeoId) {
   const description = v?.description || "";
   const duration = v?.duration || null;
   const vimeoUrl = v?.link || `https://vimeo.com/${vimeoId}`;
+  const createdTime = v?.created_time || null;
 
   if (Array.isArray(download) && download.length) {
     const sorted = [...download].sort((a, b) => (b.size || 0) - (a.size || 0));
@@ -60,6 +61,7 @@ export async function getVimeoDownloadUrl(vimeoId) {
       description,
       duration,
       vimeoUrl,
+      createdTime,
     };
   }
 
@@ -77,6 +79,7 @@ export async function getVimeoDownloadUrl(vimeoId) {
       description,
       duration,
       vimeoUrl,
+      createdTime,
     };
   }
 
@@ -164,5 +167,6 @@ export async function downloadVimeoToFile({ vimeoId, outDir }) {
     description: info.description,
     duration: info.duration,
     vimeoUrl: info.vimeoUrl,
+    createdTime: info.createdTime,
   };
 }

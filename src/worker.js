@@ -136,6 +136,7 @@ async function processFullJob(job) {
     vimeoId: job.vimeo_id,
     wpPostId: job.wp_post_id,
     postUrl: postUrl, // URL completa da matéria vinda do WordPress
+    createdTime: dl.createdTime, // Data de publicação original no Vimeo
   });
 
   // 3) UPDATE WP
