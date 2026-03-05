@@ -35,14 +35,14 @@ function wpHeaders() {
  * @returns {Promise<Object>} Resposta do WordPress
  * @throws {Error} Se a requisição falhar
  */
-export async function updateWpYouTubeUrl({ postId, youtubeUrl }) {
+export async function updateWpYouTubeUrl({ postId, metaKey, youtubeUrl }) {
   logger.debug(`Updating WordPress post ${postId} with YouTube URL`);
 
   const url = `${config.wp.baseUrl}/wp-json/migrate/v1/update-youtube`;
 
   const res = await axios.post(
     url,
-    { post_id: postId, youtube_url: youtubeUrl },
+    { post_id: postId, meta_key: metaKey, youtube_url: youtubeUrl },
     {
       headers: {
         ...wpHeaders(),
@@ -85,10 +85,10 @@ export async function fetchWpCandidates({ perPage, page, force = false } = {}) {
     throw new Error(ErrorMessages.WP_UNEXPECTED_RESPONSE);
   }
 
-  logger.debug(`Found candidates`, { 
-    count: data.items.length, 
+  logger.debug(`Found candidates`, {
+    count: data.items.length,
     total: data.total,
-    totalPages: data.total_pages 
+    totalPages: data.total_pages
   });
 
   return data;

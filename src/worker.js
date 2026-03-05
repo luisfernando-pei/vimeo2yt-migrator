@@ -247,6 +247,7 @@ export async function runWorkerOnce() {
     postId: job.wp_post_id,
     vimeoId: job.vimeo_id,
     attempt: job.attempts + 1,
+    postDate: job.post_date,
     hasWpTitle: !!job.title,
     hasWpContent: !!job.content,
     hasPostUrl: !!job.post_url

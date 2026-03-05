@@ -42,7 +42,7 @@ export async function fetchAndQueue({ force = false } = {}) {
         continue;
       }
       
-      // Passa title, content, tags, slug e post_url do WordPress para o job
+      // Passa title, content, tags, slug, post_url e post_date do WordPress para o job
       const result = upsertJob({ 
         wp_post_id: it.id, 
         vimeo_url: it.vimeo_url, 
@@ -51,7 +51,8 @@ export async function fetchAndQueue({ force = false } = {}) {
         content: it.content,
         tags: it.tags,
         slug: it.slug,
-        post_url: it.post_url
+        post_url: it.post_url,
+        post_date: it.post_date
       });
       
       // upsertJob retorna true se inseriu, false se já existia

@@ -49,8 +49,16 @@ function init(db) {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique ON jobs(wp_post_id, vimeo_id);
     CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+
+    CREATE TABLE IF NOT EXISTS quota_tracking (
+      id INTEGER PRIMARY KEY,
+      upload_count INTEGER NOT NULL DEFAULT 0,
+      quota_used INTEGER NOT NULL DEFAULT 0,
+      date TEXT NOT NULL DEFAULT (date('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
-  
+
   // Migration: add new columns if they don't exist (for existing databases)
   const migrations = [
     'ALTER TABLE jobs ADD COLUMN title TEXT',
@@ -58,8 +66,10 @@ function init(db) {
     'ALTER TABLE jobs ADD COLUMN tags TEXT',
     'ALTER TABLE jobs ADD COLUMN slug TEXT',
     'ALTER TABLE jobs ADD COLUMN post_url TEXT',
+    'ALTER TABLE jobs ADD COLUMN post_date TEXT',
+    'CREATE INDEX IF NOT EXISTS idx_jobs_post_date ON jobs(post_date)',
   ];
-  
+
   for (const sql of migrations) {
     try {
       db.exec(sql);
@@ -83,28 +93,30 @@ function init(db) {
  * @param {string[]} [params.tags] - Tags do post WordPress
  * @param {string} [params.slug] - Slug do post WordPress
  * @param {string} [params.post_url] - URL completa do post WordPress
+ * @param {string} [params.post_date] - Data de criação do post WordPress (para ordenação)
  * @returns {boolean} true se inseriu novo job, false se já existia
  */
-export function upsertJob({ wp_post_id, vimeo_url, vimeo_id, title, content, tags, slug, post_url }) {
+export function upsertJob({ wp_post_id, vimeo_url, vimeo_id, title, content, tags, slug, post_url, post_date }) {
   const db = getDb();
-  
+
   // Converte array de tags para string JSON
   const tagsJson = tags && Array.isArray(tags) ? JSON.stringify(tags) : null;
-  
+
   const stmt = db.prepare(`
-    INSERT INTO jobs (wp_post_id, vimeo_url, vimeo_id, title, content, tags, slug, post_url, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, '${JobStatus.QUEUED}')
+    INSERT INTO jobs (wp_post_id, vimeo_url, vimeo_id, title, content, tags, slug, post_url, post_date, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '${JobStatus.QUEUED}')
     ON CONFLICT(wp_post_id, vimeo_id) DO NOTHING
   `);
   const result = stmt.run(
-    wp_post_id, 
-    vimeo_url, 
-    vimeo_id, 
-    title || null, 
-    content || null, 
+    wp_post_id,
+    vimeo_url,
+    vimeo_id,
+    title || null,
+    content || null,
     tagsJson,
     slug || null,
-    post_url || null
+    post_url || null,
+    post_date || null
   );
   if (result.changes > 0) {
     logger.debug(`Job inserted`, { wp_post_id, vimeo_id, title, slug });
@@ -115,7 +127,8 @@ export function upsertJob({ wp_post_id, vimeo_url, vimeo_id, title, content, tag
 
 /**
  * Busca próximo job disponível para processamento
- * Prioriza jobs mais antigos (updated_at ASC)
+ * Prioriza jobs mais antigos (post_date ASC) para processar do mais antigo ao mais novo
+ * Isso garante que vídeos antigos sejam upados primeiro, aparecendo no início da lista do YouTube
  * @returns {Object|null} Job encontrado ou null se vazio
  */
 export function nextJob() {
@@ -124,14 +137,14 @@ export function nextJob() {
     SELECT * FROM jobs
     WHERE status IN ('${JobStatus.QUEUED}','${JobStatus.FAILED}')
       AND attempts < ?
-    ORDER BY updated_at ASC
+    ORDER BY post_date ASC, created_at ASC
     LIMIT 1
   `).get(config.worker.maxAttempts);
-  
+
   if (row) {
-    logger.debug(`Next job selected`, { jobId: row.id, vimeoId: row.vimeo_id });
+    logger.debug(`Next job selected`, { jobId: row.id, vimeoId: row.vimeo_id, postDate: row.post_date, createdAt: row.created_at });
   }
-  
+
   return row || null;
 }
 
@@ -182,16 +195,16 @@ export function stats() {
 // Quota tracking functions
 export function getDailyQuotaStatus() {
   const db = getDb();
-  
+
   // Ensure row exists
   db.prepare(`INSERT OR IGNORE INTO quota_tracking (id) VALUES (1)`).run();
-  
+
   const row = db.prepare(`
     SELECT upload_count, quota_used, date, updated_at 
     FROM quota_tracking 
     WHERE id = 1
   `).get();
-  
+
   // Check if it's a new day, reset if needed
   const today = new Date().toISOString().split('T')[0];
   if (row && row.date !== today) {
@@ -206,16 +219,16 @@ export function getDailyQuotaStatus() {
     `).run();
     return { upload_count: 0, quota_used: 0, date: today };
   }
-  
+
   return row || { upload_count: 0, quota_used: 0, date: today };
 }
 
 export function incrementUploadCount(uploadCost = 1600) {
   const db = getDb();
-  
+
   // Ensure row exists before incrementing
   db.prepare(`INSERT OR IGNORE INTO quota_tracking (id) VALUES (1)`).run();
-  
+
   db.prepare(`
     UPDATE quota_tracking 
     SET upload_count = upload_count + 1,
@@ -228,7 +241,7 @@ export function incrementUploadCount(uploadCost = 1600) {
 
 export function resetDailyQuota() {
   const db = getDb();
-  
+
   db.prepare(`
     UPDATE quota_tracking 
     SET upload_count = 0,
@@ -248,7 +261,7 @@ export function getQuotaStats() {
   const db = getDb();
   const status = getDailyQuotaStatus();
   const remaining = Math.max(0, Math.floor((10000 - status.quota_used) / 1600));
-  
+
   return {
     ...status,
     remaining_uploads: remaining,
