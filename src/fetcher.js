@@ -24,7 +24,7 @@ export async function fetchAndQueue({ force = false } = {}) {
 
   while (true) {
     logger.debug(`Fetching page ${page}`);
-    
+
     const data = await fetchWpCandidates({ page, force });
     const items = data.items;
 
@@ -34,18 +34,19 @@ export async function fetchAndQueue({ force = false } = {}) {
     for (const it of items) {
       const vimeoId = parseVimeoId(it.vimeo_url);
       if (!vimeoId) {
-        logger.warn(`Invalid Vimeo URL, skipping`, { 
-          postId: it.id, 
-          url: it.vimeo_url 
+        logger.warn(`Invalid Vimeo URL, skipping`, {
+          postId: it.id,
+          url: it.vimeo_url
         });
         skipped++;
         continue;
       }
-      
+
       // Passa title, content, tags, slug, post_url e post_date do WordPress para o job
-      const result = upsertJob({ 
-        wp_post_id: it.id, 
-        vimeo_url: it.vimeo_url, 
+      logger.debug(`Queueing item`, { postId: it.id, date: it.post_date, slug: it.slug });
+      const result = upsertJob({
+        wp_post_id: it.id,
+        vimeo_url: it.vimeo_url,
         vimeo_id: vimeoId,
         title: it.title,
         content: it.content,
@@ -54,7 +55,7 @@ export async function fetchAndQueue({ force = false } = {}) {
         post_url: it.post_url,
         post_date: it.post_date
       });
-      
+
       // upsertJob retorna true se inseriu, false se já existia
       if (result) {
         queued++;
@@ -64,8 +65,8 @@ export async function fetchAndQueue({ force = false } = {}) {
       }
     }
 
-    logger.info(`Page ${page} processed`, { 
-      items: items.length, 
+    logger.info(`Page ${page} processed`, {
+      items: items.length,
       queued: pageQueued,
       skipped: items.length - pageQueued,
       totalQueued: queued,
@@ -77,7 +78,7 @@ export async function fetchAndQueue({ force = false } = {}) {
       logger.info(`Reached max pages limit`, { maxPages: config.wp.fetchMaxPages });
       break;
     }
-    
+
     if (page >= (data.total_pages || 1)) {
       logger.info(`Reached last page`, { totalPages: data.total_pages });
       break;
@@ -86,11 +87,11 @@ export async function fetchAndQueue({ force = false } = {}) {
     page++;
   }
 
-  logger.info(`Fetch and queue completed`, { 
-    fetched: fetchedItems, 
-    queued, 
+  logger.info(`Fetch and queue completed`, {
+    fetched: fetchedItems,
+    queued,
     skipped,
-    pages: page 
+    pages: page
   });
 
   return { fetched: fetchedItems, queued, skipped, pages: page };

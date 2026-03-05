@@ -177,7 +177,7 @@ function vimeo2yt_get_candidates(WP_REST_Request $req)
     'posts_per_page' => $per_page,
     'paged' => $page,
     'meta_query' => $meta_query,
-    'orderby' => 'date',
+    'orderby' => 'ID',
     'order' => 'ASC',
     'no_found_rows' => false,
   ]);
