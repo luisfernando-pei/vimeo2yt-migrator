@@ -31,13 +31,13 @@ function must(name) {
 export const config = {
   /** Ambiente da aplicação (qa, prod) */
   appEnv: must("APP_ENV"),
-  
+
   /** Caminho do banco de dados SQLite */
   dbPath: must("DB_PATH"),
-  
+
   /** Diretório temporário para downloads */
   tmpDir: must("TMP_DIR"),
-  
+
   /** Caminho do arquivo de log */
   logFile: must("LOG_FILE"),
 
@@ -74,6 +74,7 @@ export const config = {
     cleanupOk: process.env.CLEANUP_OK === "1",
     maxAttempts: Number(process.env.MAX_ATTEMPTS || 5),
     delayBetweenUploadsMs: Number(process.env.DELAY_BETWEEN_UPLOADS_MS || 0),
+    maxJobsPerRun: Number(process.env.MAX_JOBS_PER_RUN || 0),
   },
 };
 
@@ -88,7 +89,7 @@ export function ensureDirs() {
     "logs",
     "data"
   ];
-  
+
   for (const p of dirs) {
     if (!fs.existsSync(p)) {
       fs.mkdirSync(p, { recursive: true });

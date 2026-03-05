@@ -56,10 +56,10 @@ function parseTags(tagsJson) {
  */
 async function processResumeJob(job) {
   const env = getEnvName();
-  
-  logger.info(`Resuming job`, { 
-    jobId: job.id, 
-    youtubeUrl: job.youtube_url 
+
+  logger.info(`Resuming job`, {
+    jobId: job.id,
+    youtubeUrl: job.youtube_url
   });
 
   setStatus(job.id, JobStatus.UPDATING_WP, {
@@ -88,11 +88,11 @@ async function processResumeJob(job) {
     note: "WP update retried without reupload",
   });
 
-  logger.info(`Job completed (resume)`, { 
-    jobId: job.id, 
-    youtubeUrl: job.youtube_url 
+  logger.info(`Job completed (resume)`, {
+    jobId: job.id,
+    youtubeUrl: job.youtube_url
   });
-  
+
   return true;
 }
 
@@ -109,9 +109,9 @@ async function processFullJob(job) {
 
   // 1) DOWNLOAD
   setStatus(job.id, JobStatus.DOWNLOADING);
-  const dl = await downloadVimeoToFile({ 
-    vimeoId: job.vimeo_id, 
-    outDir: config.tmpDir 
+  const dl = await downloadVimeoToFile({
+    vimeoId: job.vimeo_id,
+    outDir: config.tmpDir
   });
 
   // 2) UPLOAD YT - Usa title/content do WordPress, com fallback para Vimeo
@@ -123,10 +123,10 @@ async function processFullJob(job) {
   // Prioriza dados do WordPress, fallback para Vimeo se não existir
   const title = job.title || dl.title || `Video ${job.vimeo_id}`;
   const description = job.content || dl.description || "";
-  
+
   // Usa post_url do banco de dados (vindo do WordPress)
   const postUrl = job.post_url || null;
-  
+
   const yt = await uploadToYouTube({
     filePath: dl.outPath,
     title: title,
@@ -172,13 +172,13 @@ async function processFullJob(job) {
     await cleanupFile(dl.outPath);
   }
 
-  logger.info(`Job completed`, { 
-    jobId: job.id, 
+  logger.info(`Job completed`, {
+    jobId: job.id,
     youtubeUrl: yt.youtubeUrl,
     title: title.substring(0, 50),
     postUrl: postUrl
   });
-  
+
   return true;
 }
 
@@ -202,8 +202,8 @@ async function cleanupFile(filePath) {
  */
 async function handleJobError(job, error) {
   const env = getEnvName();
-  const err = error?.response?.data 
-    ? JSON.stringify(error.response.data) 
+  const err = error?.response?.data
+    ? JSON.stringify(error.response.data)
     : error?.message || String(error);
 
   setStatus(job.id, JobStatus.FAILED, { error: err });
@@ -221,9 +221,9 @@ async function handleJobError(job, error) {
     note: err,
   });
 
-  logger.error(`Job failed`, { 
-    jobId: job.id, 
-    error: err 
+  logger.error(`Job failed`, {
+    jobId: job.id,
+    error: err
   });
 }
 
@@ -234,7 +234,7 @@ async function handleJobError(job, error) {
  */
 export async function runWorkerOnce() {
   const job = nextJob();
-  
+
   if (!job) {
     logger.info("No jobs queued or failed");
     return false;
@@ -272,25 +272,32 @@ export async function runWorkerOnce() {
  * Processa jobs até não haver mais na fila
  */
 export async function runWorkerLoop() {
-  logger.info("Starting worker loop");
-  
+  const maxJobs = config.worker.maxJobsPerRun;
+  logger.info("Starting worker loop", { maxJobsLimit: maxJobs > 0 ? maxJobs : "unlimited" });
+
   let processedCount = 0;
-  
+
   while (true) {
+    // Verifica limite de jobs por execução
+    if (maxJobs > 0 && processedCount >= maxJobs) {
+      logger.info(`Reached max jobs per run limit (${maxJobs}). Stopping.`, { processedCount });
+      break;
+    }
+
     const worked = await runWorkerOnce();
     if (!worked) break;
     processedCount++;
-    
+
     // Delay entre uploads - só aplica se configurado (> 0)
     const delayMs = config.worker.delayBetweenUploadsMs;
-    if (delayMs && delayMs > 0) {
-      logger.info(`Waiting ${delayMs}ms before next upload...`, { 
-        jobCount: processedCount, 
-        delayMs 
+    if (delayMs && delayMs > 0 && (maxJobs === 0 || processedCount < maxJobs)) {
+      logger.info(`Waiting ${delayMs}ms before next upload...`, {
+        jobCount: processedCount,
+        delayMs
       });
       await sleep(delayMs);
     }
   }
-  
+
   logger.info("Worker loop finished", { processedCount });
 }
