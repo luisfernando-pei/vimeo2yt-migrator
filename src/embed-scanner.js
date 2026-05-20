@@ -9,9 +9,13 @@ import { Patterns } from "./constants.js";
 export function extractVimeoIds(content) {
   if (!content || typeof content !== "string") return [];
   const re = new RegExp(Patterns.PLAYER_VIMEO_ID.source, "g");
+  const seen = new Set();
   const ids = [];
   for (const m of content.matchAll(re)) {
-    if (!ids.includes(m[1])) ids.push(m[1]);
+    if (!seen.has(m[1])) {
+      seen.add(m[1]);
+      ids.push(m[1]);
+    }
   }
   return ids;
 }

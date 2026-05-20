@@ -24,5 +24,11 @@ test("extractVimeoIds devolve vazio para conteudo sem Vimeo", () => {
 
 test("extractVimeoIds trata entrada null/vazia", () => {
   assert.deepStrictEqual(extractVimeoIds(null), []);
+  assert.deepStrictEqual(extractVimeoIds(undefined), []);
   assert.deepStrictEqual(extractVimeoIds(""), []);
+});
+
+test("extractVimeoIds preserva a ordem de aparicao (nao ordena)", () => {
+  const content = EX1.replace("1110143545", "9999999999") + "\n" + EX1;
+  assert.deepStrictEqual(extractVimeoIds(content), ["9999999999", "1110143545"]);
 });
