@@ -56,3 +56,22 @@ test("rewriteContent deixa conteudo sem Vimeo inalterado", () => {
   assert.deepStrictEqual(replacedIds, []);
   assert.deepStrictEqual(missingIds, []);
 });
+
+test("rewriteContent trata entrada null/vazia", () => {
+  assert.deepStrictEqual(rewriteContent(null), { content: "", replacedIds: [], missingIds: [] });
+  assert.deepStrictEqual(rewriteContent(""), { content: "", replacedIds: [], missingIds: [] });
+});
+
+test("rewriteContent usa o src real mesmo com data-src antes", () => {
+  const html = '<div><iframe data-src="https://player.vimeo.com/video/111" src="https://player.vimeo.com/video/1110143545" style="x"></iframe></div>';
+  const { content, replacedIds } = rewriteContent(html, { "1110143545": "ytREAL" });
+  assert.ok(content.includes("https://www.youtube.com/embed/ytREAL"));
+  assert.deepStrictEqual(replacedIds, ["1110143545"]);
+});
+
+test("rewriteContent rejeita ID do YouTube invalido", () => {
+  const { content, replacedIds, missingIds } = rewriteContent(EX1, { "1110143545": 'bad"id' });
+  assert.deepStrictEqual(replacedIds, []);
+  assert.deepStrictEqual(missingIds, ["1110143545"]);
+  assert.ok(content.includes("player.vimeo.com/video/1110143545"));
+});

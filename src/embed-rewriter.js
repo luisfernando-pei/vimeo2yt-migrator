@@ -4,15 +4,18 @@ import { Patterns } from "./constants.js";
 const VIMEO_IFRAME_RE = /<iframe\b[^>]*?>\s*<\/iframe>/gi;
 /** Casa a tag <script> do player do Vimeo */
 const PLAYER_SCRIPT_RE = /<script\b[^>]*\bsrc="https:\/\/player\.vimeo\.com\/api\/player\.js"[^>]*>\s*<\/script>/gi;
+/** Formato válido de ID do YouTube */
+const YOUTUBE_ID_RE = /^[a-zA-Z0-9_-]+$/;
 
 /**
  * Extrai o valor de um atributo de uma tag HTML.
+ * O lookbehind evita casar o sufixo de outro atributo (ex: data-src vs src).
  * @param {string} tag - String da tag
  * @param {string} name - Nome do atributo
  * @returns {string|null}
  */
 function getAttr(tag, name) {
-  const m = tag.match(new RegExp(`\\b${name}="([^"]*)"`, "i"));
+  const m = tag.match(new RegExp(`(?<![\\w-])${name}="([^"]*)"`, "i"));
   return m ? m[1] : null;
 }
 
@@ -24,7 +27,8 @@ function getAttr(tag, name) {
  * @returns {{content: string, replacedIds: string[], missingIds: string[]}}
  *   content - HTML novo
  *   replacedIds - vimeoIds efetivamente trocados
- *   missingIds - vimeoIds achados no conteúdo mas ausentes do videoMap
+ *   missingIds - vimeoIds achados no conteúdo mas não trocados (ausentes do
+ *                videoMap ou com ID do YouTube inválido)
  */
 export function rewriteContent(content, videoMap = {}) {
   if (!content || typeof content !== "string") {
@@ -41,9 +45,9 @@ export function rewriteContent(content, videoMap = {}) {
 
     const vimeoId = idMatch[1];
     const youtubeId = videoMap[vimeoId];
-    if (!youtubeId) {
+    if (!youtubeId || !YOUTUBE_ID_RE.test(youtubeId)) {
       if (!missingIds.includes(vimeoId)) missingIds.push(vimeoId);
-      return iframeTag; // não resolvido — deixa intacto
+      return iframeTag; // não resolvido ou ID inválido — deixa intacto
     }
 
     if (!replacedIds.includes(vimeoId)) replacedIds.push(vimeoId);
