@@ -742,10 +742,10 @@ export async function updatePostContent({ postId, content }) {
 Run: `node --check src/embed-wordpress.js`
 Expected: sem saída (sintaxe OK)
 
-- [ ] **Step 3: Rodar o lint**
+- [ ] **Step 3: Rodar o lint do arquivo novo**
 
-Run: `npm run lint`
-Expected: PASS — sem erros do eslint
+Run: `npx eslint src/embed-wordpress.js`
+Expected: PASS — sem erros do eslint (o `src/` legado tem dívida de lint pré-existente; verificamos só o arquivo novo)
 
 - [ ] **Step 4: Commit**
 
@@ -852,10 +852,10 @@ export async function scanAndQueue(embedDb) {
 Run: `node --check src/embed-fetcher.js`
 Expected: sem saída (sintaxe OK)
 
-- [ ] **Step 3: Rodar o lint**
+- [ ] **Step 3: Rodar o lint do arquivo novo**
 
-Run: `npm run lint`
-Expected: PASS — sem erros do eslint
+Run: `npx eslint src/embed-fetcher.js`
+Expected: PASS — sem erros do eslint (o `src/` legado tem dívida de lint pré-existente; verificamos só o arquivo novo)
 
 - [ ] **Step 4: Commit**
 
@@ -1086,10 +1086,10 @@ export async function runEmbedWorkerLoop(embedDb, { dryRun = false, limit = 0 } 
 Run: `node --check src/embed-worker.js`
 Expected: sem saída (sintaxe OK)
 
-- [ ] **Step 3: Rodar o lint**
+- [ ] **Step 3: Rodar o lint do arquivo novo**
 
-Run: `npm run lint`
-Expected: PASS — sem erros do eslint
+Run: `npx eslint src/embed-worker.js`
+Expected: PASS — sem erros do eslint (o `src/` legado tem dívida de lint pré-existente; verificamos só o arquivo novo)
 
 - [ ] **Step 4: Commit**
 
@@ -1169,8 +1169,8 @@ Em `package.json`, no objeto `scripts`, logo após a linha `"status:prod": ...`,
 
 - [ ] **Step 3: Verificar sintaxe e lint**
 
-Run: `node --check src/embed-cli.js && npm run lint`
-Expected: sem saída do `--check`; lint PASS
+Run: `node --check src/embed-cli.js && npx eslint src/embed-cli.js`
+Expected: sem saída do `--check`; lint do arquivo novo PASS
 
 - [ ] **Step 4: Verificar que o CLI mostra o usage sem argumentos**
 
