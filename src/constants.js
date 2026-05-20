@@ -18,6 +18,19 @@ export const JobStatus = {
 };
 
 /**
+ * Status possíveis de uma matéria na migração de vídeos embedados
+ * @readonly
+ * @enum {string}
+ */
+export const EmbedJobStatus = {
+  QUEUED: "queued",
+  PROCESSING: "processing",
+  DONE: "done",
+  FAILED: "failed",
+  NO_VIDEOS: "no_videos",
+};
+
+/**
  * Configurações de retry e rate limiting
  * @readonly
  */
@@ -154,6 +167,8 @@ export const HttpHeaders = {
 export const Patterns = {
   /** Extrair ID do Vimeo de URL */
   VIMEO_ID: /vimeo\.com\/(\d+)/,
+  /** Extrair ID do Vimeo de URL de player embedado (player.vimeo.com/video/ID) */
+  PLAYER_VIMEO_ID: /player\.vimeo\.com\/video\/(\d+)/,
   /** ID do YouTube em URL youtu.be */
   YOUTUBE_SHORT_URL: /youtu\.be\/([a-zA-Z0-9_-]+)/,
   /** ID do YouTube em URL youtube.com/watch */
