@@ -128,7 +128,7 @@ export function createEmbedDb(dbPath, maxAttempts = RetryConfig.MAX_ATTEMPTS) {
     /** Incrementa o contador de tentativas de uma matéria. */
     incEmbedPostAttempts(id) {
       db.prepare(
-        `UPDATE embed_posts SET attempts = attempts + 1, updated_at = ? WHERE id = ?`
+        "UPDATE embed_posts SET attempts = attempts + 1, updated_at = ? WHERE id = ?"
       ).run(new Date().toISOString(), id);
     },
 
@@ -138,7 +138,7 @@ export function createEmbedDb(dbPath, maxAttempts = RetryConfig.MAX_ATTEMPTS) {
      */
     embedStats() {
       const rows = db
-        .prepare(`SELECT status, COUNT(*) AS n FROM embed_posts GROUP BY status`)
+        .prepare("SELECT status, COUNT(*) AS n FROM embed_posts GROUP BY status")
         .all();
       return Object.fromEntries(rows.map((r) => [r.status, r.n]));
     },
@@ -151,7 +151,7 @@ export function createEmbedDb(dbPath, maxAttempts = RetryConfig.MAX_ATTEMPTS) {
      */
     resolveYoutubeId(vimeoId) {
       const fromMap = db
-        .prepare(`SELECT youtube_id, youtube_url FROM video_map WHERE vimeo_id = ?`)
+        .prepare("SELECT youtube_id, youtube_url FROM video_map WHERE vimeo_id = ?")
         .get(String(vimeoId));
       if (fromMap) {
         return {
