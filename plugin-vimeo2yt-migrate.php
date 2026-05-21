@@ -338,7 +338,8 @@ function vimeo2yt_get_embed_candidates(WP_REST_Request $req)
   $post_id = (int) $req->get_param('post_id');
   if ($post_id > 0) {
     $post = get_post($post_id);
-    $items = ($post && $post->post_status !== 'trash') ? [vimeo2yt_embed_item($post)] : [];
+    // Mesmo critério da busca paginada: só matérias publicadas.
+    $items = ($post && $post->post_status === 'publish') ? [vimeo2yt_embed_item($post)] : [];
     return new WP_REST_Response([
       'page' => 1,
       'per_page' => 1,
@@ -400,7 +401,7 @@ function vimeo2yt_update_content(WP_REST_Request $req)
   $post_id = (int) $req->get_param('post_id');
   $content = (string) $req->get_param('content');
 
-  if (!$post_id || $content === '') {
+  if (!$post_id || trim($content) === '') {
     return new WP_REST_Response(['ok' => false, 'error' => 'missing_params'], 400);
   }
 
@@ -420,6 +421,10 @@ function vimeo2yt_update_content(WP_REST_Request $req)
 
   if (is_wp_error($result)) {
     return new WP_REST_Response(['ok' => false, 'error' => $result->get_error_message()], 500);
+  }
+  // wp_update_post devolve 0 se a gravação falhar (ex: post removido numa corrida).
+  if (!$result) {
+    return new WP_REST_Response(['ok' => false, 'error' => 'update_failed'], 500);
   }
 
   return new WP_REST_Response(['ok' => true, 'post_id' => $post_id], 200);
