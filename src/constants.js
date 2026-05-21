@@ -28,6 +28,7 @@ export const EmbedJobStatus = {
   DONE: "done",
   FAILED: "failed",
   NO_VIDEOS: "no_videos",
+  SKIPPED_EXTERNAL: "skipped_external",
 };
 
 /**

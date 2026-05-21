@@ -7,6 +7,7 @@ import { downloadVimeoToFile } from "./vimeo.js";
 import { uploadToYouTube } from "./youtube.js";
 import { logger } from "./utils/logger.js";
 import { EmbedJobStatus } from "./constants.js";
+import { classifyEmbedError } from "./embed-errors.js";
 
 /**
  * Resolve um vídeo do Vimeo para um ID do YouTube.
@@ -193,12 +194,22 @@ export async function runEmbedWorkerLoop(embedDb, { dryRun = false, limit = 0 } 
       const msg = err?.response?.data
         ? JSON.stringify(err.response.data)
         : err?.message || String(err);
-      embedDb.setEmbedPostStatus(post.id, EmbedJobStatus.FAILED, { error: msg });
-      logger.error("Embed post failed", { id: post.id, error: msg });
+      const status = classifyEmbedError(err);
+      embedDb.setEmbedPostStatus(post.id, status, { error: msg });
+      if (status === EmbedJobStatus.SKIPPED_EXTERNAL) {
+        logger.warn("Embed post pulada — video do Vimeo e de terceiros (nao baixavel)", {
+          id: post.id,
+          wpPostId: post.wp_post_id,
+          postUrl: post.post_url,
+        });
+      } else {
+        logger.error("Embed post failed", { id: post.id, error: msg });
+      }
     }
     processed++;
   }
 
-  logger.info("Embed worker loop finished", { processed });
-  return { processed };
+  const stats = embedDb.embedStats();
+  logger.info("Embed worker loop finished", { processed, stats });
+  return { processed, stats };
 }
