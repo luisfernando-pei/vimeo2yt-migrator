@@ -1,18 +1,15 @@
-import fs from "node:fs";
-import { config } from "./config.js";
+import { config, ensureDirs } from "./config.js";
 import { createEmbedDb } from "./embed-db.js";
 import { scanAndQueue } from "./embed-fetcher.js";
 import { runEmbedWorkerLoop } from "./embed-worker.js";
 
-// Garante diretórios necessários
-for (const d of ["data", config.tmpDir]) {
-  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-}
+// Garante diretórios necessários (data, tmp, logs, dir do banco)
+ensureDirs();
 
 const cmd = process.argv[2];
 const dryRun = process.argv.includes("--dry-run");
 const limitArg = process.argv.find((a) => a.startsWith("--limit="));
-const limit = limitArg ? parseInt(limitArg.split("=")[1], 10) || 0 : 0;
+const limit = limitArg ? Math.max(0, parseInt(limitArg.split("=")[1], 10) || 0) : 0;
 
 if (!cmd || !["scan", "migrate", "status"].includes(cmd)) {
   console.log("Usage: node src/embed-cli.js <scan|migrate|status> [--dry-run] [--limit=N]");
