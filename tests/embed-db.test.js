@@ -73,3 +73,16 @@ test("nextEmbedPost pega a materia mais antiga primeiro", () => {
   edb.close();
   cleanup(p);
 });
+
+test("resolveYoutubeId enxerga a tabela jobs criada apos o factory", () => {
+  const p = tmpDbPath();
+  const edb = createEmbedDb(p);
+  edb.db.exec("CREATE TABLE jobs (id INTEGER PRIMARY KEY, vimeo_id TEXT, youtube_id TEXT, youtube_url TEXT)");
+  edb.db.prepare("INSERT INTO jobs (vimeo_id, youtube_id, youtube_url) VALUES (?,?,?)")
+    .run("333", "ytLATE", "https://youtu.be/ytLATE");
+  const r = edb.resolveYoutubeId("333");
+  assert.strictEqual(r.youtubeId, "ytLATE");
+  assert.strictEqual(r.source, "reuse:play");
+  edb.close();
+  cleanup(p);
+});

@@ -56,10 +56,9 @@ export function createEmbedDb(dbPath, maxAttempts = RetryConfig.MAX_ATTEMPTS) {
   db.pragma(`journal_mode = ${DatabaseConfig.JOURNAL_MODE}`);
   db.pragma(`busy_timeout = ${DatabaseConfig.BUSY_TIMEOUT_MS}`);
   initSchema(db);
-  const hasJobs = jobsTableExists(db);
 
   return {
-    /** Handle bruto do better-sqlite3 (usado por testes). */
+    /** Handle bruto do better-sqlite3. Uso interno/testes — não usar por chamadores de produção. */
     db,
 
     /**
@@ -161,7 +160,7 @@ export function createEmbedDb(dbPath, maxAttempts = RetryConfig.MAX_ATTEMPTS) {
           source: "reuse:embed",
         };
       }
-      if (hasJobs) {
+      if (jobsTableExists(db)) {
         const fromJobs = db
           .prepare(
             `SELECT youtube_id, youtube_url FROM jobs
