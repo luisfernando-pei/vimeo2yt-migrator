@@ -29,6 +29,7 @@ export async function scanAndQueue(embedDb) {
   let queuedPosts = 0;
   let reused = 0;
   let needUpload = 0;
+  let skippedNoTitle = 0;
 
   const csvPath = path.join("data", `embed-scan.${config.appEnv}.csv`);
   const csvLines = ["wp_post_id,title,post_url,vimeo_id,dedup"];
@@ -41,6 +42,16 @@ export async function scanAndQueue(embedDb) {
     for (const item of data.items) {
       const ids = extractVimeoIds(item.content);
       if (ids.length === 0) continue;
+
+      // Matéria sem título = post quebrado no WordPress — não enfileira.
+      if (!item.title || String(item.title).trim() === "") {
+        skippedNoTitle++;
+        logger.warn("Materia ignorada — sem titulo (post quebrado no WP)", {
+          wpPostId: item.id,
+          postUrl: item.post_url,
+        });
+        continue;
+      }
 
       totalPosts++;
       totalVideos += ids.length;
@@ -71,7 +82,7 @@ export async function scanAndQueue(embedDb) {
 
   fs.writeFileSync(csvPath, csvLines.join("\n") + "\n");
 
-  const summary = { totalPosts, totalVideos, queuedPosts, reused, needUpload, csvPath };
+  const summary = { totalPosts, totalVideos, queuedPosts, reused, needUpload, skippedNoTitle, csvPath };
   logger.info("Embed scan completed", summary);
   return summary;
 }
