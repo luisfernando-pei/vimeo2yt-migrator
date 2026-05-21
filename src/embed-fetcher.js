@@ -12,7 +12,7 @@ import { logger } from "./utils/logger.js";
  */
 function csvField(v) {
   const s = String(v ?? "");
-  return /[",\n]/.test(s) ? "\"" + s.replace(/"/g, "\"\"") + "\"" : s;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, "\"\"")}"` : s;
 }
 
 /**
