@@ -34,36 +34,39 @@ async function resolveVideo(embedDb, vimeoId, post, dryRun) {
   }
 
   const dl = await downloadVimeoToFile({ vimeoId, outDir: config.tmpDir });
-  const yt = await uploadToYouTube({
-    filePath: dl.outPath,
-    title: dl.title || `Video ${vimeoId}`,
-    description: "",
-    tags: [],
-    vimeoUrl: dl.vimeoUrl,
-    vimeoId,
-    wpPostId: post.wp_post_id,
-    postUrl: post.post_url,
-    createdTime: dl.createdTime,
-  });
+  try {
+    const yt = await uploadToYouTube({
+      filePath: dl.outPath,
+      title: dl.title || `Video ${vimeoId}`,
+      description: "",
+      tags: [],
+      vimeoUrl: dl.vimeoUrl,
+      vimeoId,
+      wpPostId: post.wp_post_id,
+      postUrl: post.post_url,
+      createdTime: dl.createdTime,
+    });
 
-  embedDb.recordVideoMap({
-    vimeo_id: vimeoId,
-    youtube_id: yt.youtubeId,
-    youtube_url: yt.youtubeUrl,
-    vimeo_name: dl.title || null,
-    source_post_id: post.wp_post_id,
-  });
+    embedDb.recordVideoMap({
+      vimeo_id: vimeoId,
+      youtube_id: yt.youtubeId,
+      youtube_url: yt.youtubeUrl,
+      vimeo_name: dl.title || null,
+      source_post_id: post.wp_post_id,
+    });
 
-  if (config.worker.cleanupOk) {
-    try {
-      fs.unlinkSync(dl.outPath);
-    } catch (e) {
-      logger.warn("Cleanup failed", { filePath: dl.outPath, error: e.message });
+    logger.info("Video uploaded", { vimeoId, youtubeUrl: yt.youtubeUrl });
+    return { youtubeId: yt.youtubeId, youtubeUrl: yt.youtubeUrl, reused: false };
+  } finally {
+    // Remove o arquivo temporário mesmo se o upload falhar (evita encher o disco)
+    if (config.worker.cleanupOk) {
+      try {
+        fs.unlinkSync(dl.outPath);
+      } catch (e) {
+        logger.warn("Cleanup failed", { filePath: dl.outPath, error: e.message });
+      }
     }
   }
-
-  logger.info("Video uploaded", { vimeoId, youtubeUrl: yt.youtubeUrl });
-  return { youtubeId: yt.youtubeId, youtubeUrl: yt.youtubeUrl, reused: false };
 }
 
 /**
