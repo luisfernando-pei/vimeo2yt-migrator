@@ -38,7 +38,7 @@
     "axios": "^1.7.7",
     "better-sqlite3": "^11.5.0",
     "dotenv": "^16.4.5",
-    "googleapis": "^144.0.0",
+    "googleapis": "^172.0.0",
     "p-limit": "^6.1.0"
   },
   "devDependencies": {

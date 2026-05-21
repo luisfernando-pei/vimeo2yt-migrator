@@ -146,6 +146,7 @@ export async function uploadToYouTube({ filePath, title, description, tags, vime
 
   const meter = makeSpeedMeter();
   let lastLog = Date.now();
+  let lastBytes = 0;
 
   // Trunca título para limite do YouTube (100 caracteres)
   const finalTitle = truncateText((title || "").trim(), YouTubeQuota.MAX_TITLE_LENGTH) || `Video ${vimeoId || ""}`.trim() || "Video";
@@ -189,25 +190,33 @@ export async function uploadToYouTube({ filePath, title, description, tags, vime
         }
       },
       media: {
-        body: fs.createReadStream(filePath).on("data", (chunk) => {
-          meter.tick(chunk.length);
-          if (Date.now() - lastLog > UploadConfig.PROGRESS_LOG_INTERVAL_MS) {
-            lastLog = Date.now();
-            const s = meter.snapshot();
-            const pct = (s.bytes / fileSize) * 100;
-            logger.progress("UP", vimeoId, {
-              bytes: s.bytes,
-              total: fileSize,
-              mbps: s.mbps,
-              eta: `${pct.toFixed(1)}%`,
-            });
-          }
-        })
+        // Stream "limpo": NÃO anexar .on("data") aqui. Isso colocaria o stream
+        // em modo fluindo e, para arquivos pequenos, ele se esgotaria antes do
+        // googleapis consumi-lo — o corpo iria vazio e o YouTube responde 408.
+        body: fs.createReadStream(filePath)
       }
     },
     {
-      // importante para upload grande
-      onUploadProgress: () => {}
+      // Progresso do upload pelo mecanismo do googleapis (evt.bytesRead é cumulativo).
+      onUploadProgress: (evt) => {
+        const read = evt && typeof evt.bytesRead === "number" ? evt.bytesRead : 0;
+        const delta = read - lastBytes;
+        if (delta > 0) {
+          meter.tick(delta);
+          lastBytes = read;
+        }
+        if (Date.now() - lastLog > UploadConfig.PROGRESS_LOG_INTERVAL_MS) {
+          lastLog = Date.now();
+          const s = meter.snapshot();
+          const pct = fileSize > 0 ? (read / fileSize) * 100 : 0;
+          logger.progress("UP", vimeoId, {
+            bytes: read,
+            total: fileSize,
+            mbps: s.mbps,
+            eta: `${pct.toFixed(1)}%`,
+          });
+        }
+      }
     }
   );
 
