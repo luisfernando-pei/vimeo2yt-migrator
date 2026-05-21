@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Vimeo2YT Migrate Endpoints (Token Auth) - UPDATED
  * Description: Endpoints para listar candidatos (play) com Vimeo e atualizar ACF url_do_youtube usando X-MIGRATE-TOKEN.
- * Version: 2.1.0
+ * Version: 2.2.0
  */
 
 if (!defined('ABSPATH'))
@@ -60,6 +60,29 @@ add_action('rest_api_init', function () {
       'post_id' => ['type' => 'integer', 'required' => true],
       'youtube_url' => ['type' => 'string', 'required' => true],
       'meta_key' => ['type' => 'string', 'required' => false],
+    ],
+  ]);
+
+  // 3) LISTAR MATÉRIAS COM VÍDEO EMBEDADO NO CONTEÚDO
+  register_rest_route('migrate/v1', '/embed-candidates', [
+    'methods' => 'GET',
+    'callback' => 'vimeo2yt_get_embed_candidates',
+    'permission_callback' => 'vimeo2yt_token_ok',
+    'args' => [
+      'per_page' => ['type' => 'integer', 'default' => 20],
+      'page' => ['type' => 'integer', 'default' => 1],
+      'post_id' => ['type' => 'integer', 'default' => 0],
+    ],
+  ]);
+
+  // 4) ATUALIZAR O CONTEÚDO (post_content) DA MATÉRIA
+  register_rest_route('migrate/v1', '/update-content', [
+    'methods' => 'POST',
+    'callback' => 'vimeo2yt_update_content',
+    'permission_callback' => 'vimeo2yt_token_ok',
+    'args' => [
+      'post_id' => ['type' => 'integer', 'required' => true],
+      'content' => ['type' => 'string', 'required' => true],
     ],
   ]);
 
@@ -285,4 +308,119 @@ function vimeo2yt_update_youtube(WP_REST_Request $req)
     'youtube_url' => $youtube_url,
     'meta_key' => $meta_key
   ], 200);
+}
+
+/**
+ * Monta o item de resposta para uma matéria com vídeo embedado.
+ */
+function vimeo2yt_embed_item($post)
+{
+  return [
+    'id' => (int) $post->ID,
+    'title' => (string) $post->post_title,
+    'post_url' => (string) get_permalink($post->ID),
+    'post_date' => (string) $post->post_date,
+    'content' => (string) $post->post_content,
+  ];
+}
+
+/**
+ * GET /wp-json/migrate/v1/embed-candidates?per_page=20&page=1
+ * GET /wp-json/migrate/v1/embed-candidates?post_id=123
+ *
+ * Lista matérias publicadas cujo post_content contém um iframe do player
+ * do Vimeo. Com post_id, devolve só aquela matéria (conteúdo fresco).
+ */
+function vimeo2yt_get_embed_candidates(WP_REST_Request $req)
+{
+  global $wpdb;
+
+  $post_id = (int) $req->get_param('post_id');
+  if ($post_id > 0) {
+    $post = get_post($post_id);
+    $items = ($post && $post->post_status !== 'trash') ? [vimeo2yt_embed_item($post)] : [];
+    return new WP_REST_Response([
+      'page' => 1,
+      'per_page' => 1,
+      'total' => count($items),
+      'total_pages' => count($items) > 0 ? 1 : 0,
+      'items' => $items,
+    ], 200);
+  }
+
+  $per_page = max(1, min(100, (int) $req->get_param('per_page')));
+  $page = max(1, (int) $req->get_param('page'));
+  $offset = ($page - 1) * $per_page;
+  $like = '%player.vimeo.com/video/%';
+
+  $total = (int) $wpdb->get_var(
+    $wpdb->prepare(
+      "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_content LIKE %s",
+      $like
+    )
+  );
+
+  $ids = $wpdb->get_col(
+    $wpdb->prepare(
+      "SELECT ID FROM {$wpdb->posts}
+       WHERE post_status = 'publish' AND post_content LIKE %s
+       ORDER BY post_date ASC
+       LIMIT %d OFFSET %d",
+      $like,
+      $per_page,
+      $offset
+    )
+  );
+
+  $items = [];
+  foreach ($ids as $id) {
+    $post = get_post((int) $id);
+    if ($post) {
+      $items[] = vimeo2yt_embed_item($post);
+    }
+  }
+
+  return new WP_REST_Response([
+    'page' => $page,
+    'per_page' => $per_page,
+    'total' => $total,
+    'total_pages' => (int) ceil($total / $per_page),
+    'items' => $items,
+  ], 200);
+}
+
+/**
+ * POST /wp-json/migrate/v1/update-content
+ * Body JSON: { "post_id": 123, "content": "<novo post_content>" }
+ *
+ * Grava o post_content driblando o kses (que estriparia o <iframe>).
+ */
+function vimeo2yt_update_content(WP_REST_Request $req)
+{
+  $post_id = (int) $req->get_param('post_id');
+  $content = (string) $req->get_param('content');
+
+  if (!$post_id || $content === '') {
+    return new WP_REST_Response(['ok' => false, 'error' => 'missing_params'], 400);
+  }
+
+  $post = get_post($post_id);
+  if (!$post) {
+    return new WP_REST_Response(['ok' => false, 'error' => 'post_not_found'], 404);
+  }
+
+  // Remove os filtros do kses para preservar o <iframe> do YouTube,
+  // e reativa logo após gravar.
+  kses_remove_filters();
+  $result = wp_update_post([
+    'ID' => $post_id,
+    'post_content' => $content,
+  ], true);
+  kses_init_filters();
+
+  if (is_wp_error($result)) {
+    return new WP_REST_Response(['ok' => false, 'error' => $result->get_error_message()], 500);
+  }
+
+  return new WP_REST_Response(['ok' => true, 'post_id' => $post_id], 200);
 }
