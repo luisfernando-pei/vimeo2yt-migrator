@@ -2,6 +2,11 @@
 
 Script em Node.js para migração gradual de vídeos do Vimeo para YouTube, com atualização automática no WordPress.
 
+O projeto cobre **dois fluxos**:
+
+- **Seção Play** — vídeos no campo ACF `url_do_video_full` (comandos `fetch` / `migrate`).
+- **Vídeos embedados no conteúdo** — iframes do Vimeo dentro do `post_content` das matérias (comandos `embed:scan` / `embed:migrate` — ver [Migração de Vídeos Embedados](#-migração-de-vídeos-embedados-no-conteúdo)).
+
 ## ✨ Funcionalidades
 
 1. **Busca no WordPress**: Consulta posts candidatos via endpoint custom (`migrate/v1/vimeo-candidates`)
@@ -30,9 +35,9 @@ Script em Node.js para migração gradual de vídeos do Vimeo para YouTube, com 
 - Google OAuth 2.0 Client (YouTube Data API v3 habilitada) + Refresh Token
 - WordPress com:
   - Application Password habilitado para um usuário com permissão de editar
-  - MU-plugin com endpoints:
-    - `GET /wp-json/migrate/v1/vimeo-candidates`
-    - `POST /wp-json/migrate/v1/update-youtube`
+  - MU-plugin `plugin-vimeo2yt-migrate.php` (v2.2.0) com endpoints:
+    - `GET /wp-json/migrate/v1/vimeo-candidates` e `POST /wp-json/migrate/v1/update-youtube` (seção Play)
+    - `GET /wp-json/migrate/v1/embed-candidates` e `POST /wp-json/migrate/v1/update-content` (vídeos embedados)
   - Campos ACF:
     - Vimeo: `url_do_video_full`
     - YouTube: `url_do_youtube` (deve ter `show_in_rest: true`)
@@ -135,6 +140,74 @@ Mostra contagem de jobs por status:
 ```json
 { "queued": 10, "downloading": 0, "uploading": 0, "done": 5, "failed": 2 }
 ```
+
+---
+
+## 🎬 Migração de Vídeos Embedados no Conteúdo
+
+Além dos vídeos da seção Play (campo ACF), o projeto migra também os vídeos do Vimeo **embedados direto no conteúdo das matérias** (dentro de `<iframe>` no `post_content`). É um fluxo separado, com CLI próprio (`src/embed-cli.js`), que reusa os mesmos módulos de download/upload.
+
+### Pré-requisito: plugin WordPress v2.2.0
+
+O `plugin-vimeo2yt-migrate.php` (v2.2.0) adiciona dois endpoints:
+
+- `GET /wp-json/migrate/v1/embed-candidates` — lista matérias publicadas com iframe do Vimeo no conteúdo
+- `POST /wp-json/migrate/v1/update-content` — grava o `post_content` reescrito (driblando o kses para preservar o `<iframe>`)
+
+### Fluxo em duas fases
+
+**1. Scan** — descobre as matérias, monta a fila e gera um CSV de pré-visualização. Não altera nada.
+
+```bash
+npm run embed:scan:qa     # QA
+npm run embed:scan:prod   # Produção
+```
+
+**2. Migrate** — baixa do Vimeo, sobe no YouTube e reescreve o conteúdo da matéria.
+
+```bash
+npm run embed:migrate:qa
+npm run embed:migrate:prod
+
+# Simular sem alterar nada (não baixa, não sobe, não grava):
+npm run embed:migrate:prod -- --dry-run
+
+# Migrar em lotes (N matérias por execução):
+npm run embed:migrate:prod -- --limit=5
+```
+
+**Status:**
+
+```bash
+npm run embed:status:prod
+# { queued: 70, done: 10, failed: 0, skipped_external: 3 }
+```
+
+### O que o migrate faz em cada matéria
+
+1. Rebusca o conteúdo fresco da matéria.
+2. Para cada vídeo do Vimeo embedado, resolve o destino no YouTube:
+   - **Reuso (dedup)** — se o vídeo já está no YouTube (migração da Play ou outro embed já processado), reusa a URL existente, sem novo upload.
+   - **Upload** — senão, baixa do Vimeo e sobe no YouTube (título = nome do vídeo no Vimeo).
+3. Reescreve o `post_content`: troca o `src` do iframe para `https://www.youtube.com/embed/<id>`, mantém a `<div>` responsiva e remove o `<script>` do player do Vimeo.
+4. Grava o conteúdo novo via `update-content`.
+
+A matéria só é gravada se **todos** os vídeos dela forem resolvidos — nunca uma matéria com metade dos vídeos trocados.
+
+### Comportamentos automáticos
+
+- **Matérias sem título** são puladas no scan (posts quebrados no WordPress).
+- **Vídeos de terceiros** (de outra conta do Vimeo, não baixáveis) são marcados como `skipped_external` e não bloqueiam a fila.
+- **Idempotente** — depois de migrada, a matéria não tem mais `player.vimeo.com`, então um novo scan não a recolhe.
+
+### Tabelas SQLite (no mesmo arquivo `jobs.<env>.sqlite`)
+
+| Tabela | Função |
+|--------|--------|
+| `embed_posts` | Fila de matérias (1 linha por matéria) |
+| `video_map` | Livro-razão de dedup: `vimeo_id → youtube_id` |
+
+O CSV de pré-visualização do scan sai em `data/embed-scan.<env>.csv`.
 
 ---
 
@@ -271,6 +344,11 @@ UPDATE quota_tracking SET upload_count = 0, quota_used = 0 WHERE id = 1;
 
 - Verifique `WP_APP_USER` e `WP_APP_PASS` (Application Password, não senha normal)
 - Confirme que o endpoint custom está ativo no WordPress
+
+### Upload trava em ~16 MB / erro 408 (Request Timeout)
+
+- Uploads grandes podem travar se a rede de saída tiver firewall/proxy/inspeção que interfira em uploads longos para o Google (downloads e uploads pequenos passam; uploads grandes, não).
+- Solução: rodar a migração de um servidor com rede limpa (ex: a VM Oracle), não de uma rede corporativa restrita.
 
 ---
 
