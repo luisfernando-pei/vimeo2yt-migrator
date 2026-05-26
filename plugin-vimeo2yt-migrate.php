@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Vimeo2YT Migrate Endpoints (Token Auth) - UPDATED
  * Description: Endpoints para listar candidatos (play) com Vimeo e atualizar ACF url_do_youtube usando X-MIGRATE-TOKEN.
- * Version: 2.2.0
+ * Version: 2.3.0
  */
 
 if (!defined('ABSPATH'))
@@ -312,15 +312,42 @@ function vimeo2yt_update_youtube(WP_REST_Request $req)
 
 /**
  * Monta o item de resposta para uma matéria com vídeo embedado.
+ * Devolve content (raw, para a cirurgia de iframe) e content_clean (para o
+ * description do YouTube), além das tags do post.
  */
 function vimeo2yt_embed_item($post)
 {
+  // Tags do post (com fallback para outras taxonomias do post_type)
+  $tags = [];
+  $post_tags = get_the_tags($post->ID);
+  if ($post_tags && !is_wp_error($post_tags)) {
+    foreach ($post_tags as $tag) {
+      $tags[] = $tag->name;
+    }
+  }
+  if (empty($tags)) {
+    $taxonomies = get_object_taxonomies($post->post_type);
+    foreach ($taxonomies as $tax) {
+      if ($tax === 'post_tag') {
+        continue;
+      }
+      $terms = get_the_terms($post->ID, $tax);
+      if ($terms && !is_wp_error($terms)) {
+        foreach ($terms as $term) {
+          $tags[] = $term->name;
+        }
+      }
+    }
+  }
+
   return [
     'id' => (int) $post->ID,
     'title' => (string) $post->post_title,
     'post_url' => (string) get_permalink($post->ID),
     'post_date' => (string) $post->post_date,
     'content' => (string) $post->post_content,
+    'content_clean' => (string) vimeo2yt_clean_content($post->post_content),
+    'tags' => array_values(array_unique($tags)),
   ];
 }
 

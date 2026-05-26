@@ -5,6 +5,7 @@ import { extractVimeoIds } from "./embed-scanner.js";
 import { rewriteContent } from "./embed-rewriter.js";
 import { downloadVimeoToFile } from "./vimeo.js";
 import { uploadToYouTube } from "./youtube.js";
+import { buildEmbedUploadMetadata } from "./embed-metadata.js";
 import { logger } from "./utils/logger.js";
 import { EmbedJobStatus } from "./constants.js";
 import { classifyEmbedError } from "./embed-errors.js";
@@ -15,10 +16,11 @@ import { classifyEmbedError } from "./embed-errors.js";
  * @param {Object} embedDb
  * @param {string} vimeoId
  * @param {Object} post - Linha de embed_posts
+ * @param {Object} item - Item fresco do endpoint embed-candidates
  * @param {boolean} dryRun
  * @returns {Promise<{youtubeId:string, youtubeUrl:string, reused:boolean}|null>}
  */
-async function resolveVideo(embedDb, vimeoId, post, dryRun) {
+async function resolveVideo(embedDb, vimeoId, post, item, dryRun) {
   const existing = embedDb.resolveYoutubeId(vimeoId);
   if (existing) {
     logger.info("Video reused (dedup)", {
@@ -36,15 +38,16 @@ async function resolveVideo(embedDb, vimeoId, post, dryRun) {
 
   const dl = await downloadVimeoToFile({ vimeoId, outDir: config.tmpDir });
   try {
+    const metadata = buildEmbedUploadMetadata({ item, post, download: dl, vimeoId });
     const yt = await uploadToYouTube({
       filePath: dl.outPath,
-      title: dl.title || `Video ${vimeoId}`,
-      description: "",
-      tags: [],
+      title: metadata.title,
+      description: metadata.description,
+      tags: metadata.tags,
       vimeoUrl: dl.vimeoUrl,
       vimeoId,
       wpPostId: post.wp_post_id,
-      postUrl: post.post_url,
+      postUrl: metadata.postUrl,
       createdTime: dl.createdTime,
     });
 
@@ -104,7 +107,7 @@ export async function migrateEmbedPost(embedDb, post, { dryRun = false } = {}) {
   const videoMap = {};
   let allResolved = true;
   for (const vid of vimeoIds) {
-    const r = await resolveVideo(embedDb, vid, post, dryRun);
+    const r = await resolveVideo(embedDb, vid, post, item, dryRun);
     if (r) videoMap[vid] = r.youtubeId;
     else allResolved = false;
   }
