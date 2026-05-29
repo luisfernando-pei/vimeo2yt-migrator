@@ -1,9 +1,9 @@
 import { Patterns } from "./constants.js";
 
-/** Casa qualquer elemento <iframe ...></iframe> sem conteúdo interno */
-const VIMEO_IFRAME_RE = /<iframe\b[^>]*?>\s*<\/iframe>/gi;
+/** Casa qualquer elemento <iframe ...>...</iframe> */
+const VIMEO_IFRAME_RE = /<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi;
 /** Casa a tag <script> do player do Vimeo */
-const PLAYER_SCRIPT_RE = /<script\b[^>]*\bsrc="https:\/\/player\.vimeo\.com\/api\/player\.js"[^>]*>\s*<\/script>/gi;
+const PLAYER_SCRIPT_RE = /<script\b[^>]*\bsrc=(["'])https:\/\/player\.vimeo\.com\/api\/player\.js\1[^>]*>\s*<\/script>/gi;
 /** Formato válido de ID do YouTube */
 const YOUTUBE_ID_RE = /^[a-zA-Z0-9_-]+$/;
 
@@ -15,8 +15,8 @@ const YOUTUBE_ID_RE = /^[a-zA-Z0-9_-]+$/;
  * @returns {string|null}
  */
 function getAttr(tag, name) {
-  const m = tag.match(new RegExp(`(?<![\\w-])${name}="([^"]*)"`, "i"));
-  return m ? m[1] : null;
+  const m = tag.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i"));
+  return m ? (m[1] ?? m[2] ?? m[3] ?? null) : null;
 }
 
 /**
